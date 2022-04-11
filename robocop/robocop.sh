@@ -27,6 +27,12 @@ AUTOCRON=0
 DATE=$(date)
 SERVER=$(hostname)
 ARGUMENT_CPU=0
+ARGUMENT_PING=0
+ARGUMENT_MEMORY=0
+ARGUMENT_FS=0
+ARGUMENT_INFO=0
+ARGUMENT_FS=0
+USER_ROBOCOP=$(cut -d':' -f1 /etc/passwd | grep -i robocop)
 
 # Creamos la estructura de carpetas
 if [ -d /home/ansible/robocop ]; then
@@ -36,6 +42,7 @@ if [ -d /home/ansible/robocop ]; then
 	else
 		mkdir /home/ansible/robocop/logs
 		touch /home/ansible/robocop/logs/robocop.log
+		touch /home/ansible/robocop/logs/robocop_telegram.log
 		chmod 755 /home/ansible/robocop/logs
 		chown -R ansible:ansible /home/ansible/robocop/logs
 		mkdir /home/ansible/robocop/conf
@@ -46,7 +53,6 @@ if [ -d /home/ansible/robocop ]; then
 		mkdir /home/ansible/robocop/monit
 		chmod 755 /home/ansible/robocop/conf
 		chown -R ansible:ansible /home/ansible/robocop/monit
-
 
 	fi
 	
@@ -74,7 +80,11 @@ while test -n "$1"; do
             ARGUMENT_OPTION='1'
             shift
             ;;
-
+	--info|-info)
+	    ARGUMENT_INFO='1'
+	    ARGUMENT_OPTION='1'
+	    shift
+	    ;;
         --help|-help|help|--h|-h)
             ARGUMENT_HELP='1'
             ARGUMENT_OPTION='1'
@@ -153,6 +163,12 @@ while test -n "$1"; do
 	    ARGUMENT_FEATURE='1'
 	    shift
 	    ;;
+	--fs|-fs|fs)
+	    ARGUMENT_FS='1'
+	    ARGUMENT_FEATURE='1'
+	    FS=$2
+	    shift
+	    ;;
 	--server)
 	    AUTOCRON='1'
 	    SERVER=$2
@@ -210,13 +226,19 @@ function robocop_install {
         	echo "[!] El barrio va a estar seguro, ROBOCOP ha llegado y se está instalando..."
         	echo ""
         	echo ""
-        	echo "Empezamos a configurar el bot de Telegram"
-		echo "[?] ¿Con qué usuario vas a trabajar en los servidores? (default: robocop)"
-		echo "[i] Recuerda que si no existe o no has compartido las ssh keys, no funcionará"
-		read -r -p '[?] Añade el nombre del usuario: ' USER
+        	echo ""
+		if [ "${USER_ROBOCOP}" == "robocop" ]; then
+			echo "[i] Buen trabajo, el usuario robocop existe."
+			echo "[!] No olvides compartir las ssh keys, para un correcto funcionamiento"
+		else
+			echo "[?] El usuario robocop no existe, ¿con qué usuario deseas trabajar?"
+	                echo "[i] Recuerda que si no existe o no has compartido las ssh keys, no funcionará"
+        	        read -r -p '[?] Añade el nombre del usuario: ' USER
+			sed -i s%'robocop'%"${USER}"%g /home/ansible/robocop/conf/robocop.conf
+
+		fi
 		read -r -p '[?] Añade el TOKEN del bot: ' TOKEN
         	read -r -p '[?] Añade un CHAT ID (Después podrás añadir el resto):   ' CHAT_ID
-		sed -i s%'robocop'%"${USER}"%g /home/ansible/robocop/conf/robocop.conf
        		sed -i s%'poner_token'%"${TOKEN}"%g /home/ansible/robocop/conf/robocop.conf
        		sed -i s%'poner_id'%"${CHAT_ID}"%g /home/ansible/robocop/conf/robocop.conf
 	
@@ -277,38 +299,115 @@ function robocop_install {
 function desc_metricas_telegram {
     # requerimientos de la función
     reunir_info_servidor
-    #reunir_metricas_memoria
     #reunir_metricas_disco
 
     if [ ${ARGUMENT_CPU} == '1' ]; then
-	reunir_metricas_cpu
-    	# crear mensaje para Telegram
-	STATUS=$(grep "OK" /home/ansible/robocop/monit/status_cpu.log)
-	if [ ${STATUS} == OK  ]; then
-		STATUS="<b>OK</b> - Funciona con normalidad"
-	else
-		STATUS="<b>ALARMA!!</b> CPU FULL. Revisad lo antes posible"
-	fi
+	reunir_ping
+        STATUS_PING=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
 
-	MESSAGE="$(echo -e "<b>Host:</b>        <code>${HOSTNAME}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>CPU</b>:         <code>${COMPLETE_LOAD}</code>\\n<b>Status:</b>	<code>${STATUS}</code>")"
+        else
+		reunir_metricas_cpu
+    		# crear mensaje para Telegram
+		STATUS=$(grep "OK\|KO" /home/ansible/robocop/monit/status_cpu.log)
+		if [ ${STATUS} == OK  ]; then
+			STATUS="<b>OK</b> - CPU dentro de los umbrales acordados"
+		elif [ ${STATUS} == KO ]; then
+			STATUS="<b>ALARMA!!</b> La CPU supera el umbral ${THRESHOLD_CPU}. Revisad lo antes posible"
+		fi
+	MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>CPU</b>:         <code>${COMPLETE_LOAD}</code>\\n<b>Status:</b>	<code>${STATUS}</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"	
+	fi
     fi
 
     if [ ${ARGUMENT_PING} == '1' ]; then
 	reunir_ping
 	# crear mensaje para Telegram
-	STATUS=$(grep "OK" /home/ansible/robocop/monit/status_ping.log)
+	STATUS=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
 	if [ ${STATUS} == OK  ]; then
 		STATUS="<b>OK</b> - El servidor ${SERVER} responde a ping correctamente"
 	else
 		STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
 	fi
 	
-	MESSAGE="$(echo -e "<b>Host:</b>        <code>${HOSTNAME}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+	MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
 
     fi
+  
+    if [ ${ARGUMENT_MEMORY} == '1' ]; then
+        reunir_ping
+	STATUS_PING=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
+	if [ ${STATUS_PING} == KO ]; then
+		STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+		MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
 
+	else
+		reunir_metricas_memoria
+        	# crear mensaje para Telegram
+        	STATUS=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_mem.log)
+        	if [ ${STATUS} == OK  ]; then
+                	STATUS="<b>OK</b> - Memoria dentro de los umbrales acordados"
+		else
+        		STATUS="<b>ALARMA!!</b> La memoria supera el umbral del ${THRESHOLD_MEMORY}. Revisad lo antes posible"
+		fi
+
+        	MESSAGE="$(echo -e "<b>Host:</b>        	<code>${SERVER}</code>\\n<b>Tiempo activo</b>:		<code>${UPTIME}</code>\\n\\n<b>MEMORIA:</b>		${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+	fi
+
+    fi
+
+    if [ ${ARGUMENT_INFO} == '1' ]; then
+	reunir_ping
+        STATUS_PING=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        else
+		reunir_info_servidor
+		reunir_info_red
+    		reunir_info_distro
+    		reunir_metricas_cpu
+    		reunir_metricas_memoria
+		source /home/ansible/robocop/conf/robocop.conf
+		
+		MESSAGE="$(echo -e "<b>-SISTEMA-</b>\\n<b>Host:</b>	<code>${HOSTNAME}</code>\\n<b>OS:</b>	<code>${OPERATING_SYSTEM}</code>\\n<b>Distro:</b>	<code>${DISTRO} ${DISTRO_VERSION}</code>\\n<b>Kernel:</b>	<code>${KERNEL_NAME} ${KERNEL_VERSION}</code>\\n<b>Arquitectura:</b>	<code>${ARCHITECTURE}</code>\\n<b>Tiempo Activo:</b>	<code>${UPTIME}</code>\\n\\n<b>-IP-</b>\\n<b>IP INTERNA:</b>     <code>${INTERNAL_IP_ADDRESS}</code>\\n<b>IP EXTERNA:</b>     <code>${EXTERNAL_IP_ADDRESS}</code>\\n\\n<b>-PERFORMANCE DEL SERVIDOR-</b>\\n<b>CPU:</b>     <code>${COMPLETE_LOAD}</code>\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+	fi
+     fi
+
+     if [ ${ARGUMENT_FS} == '1' ]; then
+        reunir_ping
+        STATUS_PING=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
+     	if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        else
+                reunir_info_servidor
+		reunir_metricas_disco
+        	reunir_metricas_threshold
+		
+		STATUS=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_fs.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - El FileSystem ${FS} está dentro de los umbrales acordados."
+                else
+                        STATUS="<b>ALARMA!!</b> El FS ${FS} supera el umbral del ${THRESHOLD_DISK}. Revisad lo antes posible"
+                fi
+
+	
+		MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo:</b>          <code>${UPTIME}</code>\\n\\n<b>Disco:</b>	<code>${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)</code>\\n<b>FS ${FS}:</b>          <code>${CURRENT_FS_USAGE} / ${TOTAL_FS_SIZE} (${CURRENT_FS_PERCENTAGE}%)</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        fi
+     fi
 }
 
 function envio_telegram {
@@ -433,7 +532,7 @@ function reunir_info_distro {
 
     # poner nombre de distribución, id y versión en variables
     DISTRO="${NAME}"
-    DISTRO_ID="${ID}"
+    DISTRO_ID="${DISTRO_ID}"
     DISTRO_VERSION="${VERSION_ID}"
 }
 
@@ -449,10 +548,10 @@ function reunir_info_servidor {
 
 function reunir_info_red {
     # información de la IP interna
-    INTERNAL_IP_ADDRESS="$(hostname -I)"
+    INTERNAL_IP_ADDRESS="$(ssh ${USER}@${SERVER} "hostname -I")"
 
     # información de la IP externa
-    EXTERNAL_IP_ADDRESS="$(curl --silent ipecho.net/plain)"
+    EXTERNAL_IP_ADDRESS="$(ssh ${USER}@${SERVER} "curl --silent ipecho.net/plain")"
 }
 
 function reunir_metricas_cpu {
@@ -481,7 +580,39 @@ function reunir_ping {
     fi
 }
 
+function reunir_metricas_memoria {
+    # métricas de memoria con la herramienta free
+    FREE_VERSION="$(ssh ${USER}@${SERVER} free --version | awk '{ print $NF }' | tr -d '.')"
 
+    # usa el formato antiguo cuando se use la versión antigua de free
+    if [ "${FREE_VERSION}" -le "339" ]; then
+        TOTAL_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $2}')"
+        FREE_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $4}')"
+        BUFFERS_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $6}')"
+        CACHED_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $7}')"
+        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_MEMORY}-${CACHED_MEMORY})" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
+    # usa un formato más nuevo cuando se use una versión más nueva de free
+    elif [ "${FREE_VERSION}" -gt "339" ]; then
+        TOTAL_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $2}')"
+        FREE_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $4}')"
+        BUFFERS_CACHED_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $6}')"
+        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_CACHED_MEMORY})" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
+    fi
+}
+
+function reunir_metricas_disco {
+    # métricas de FS
+    TOTAL_DISK_SIZE="$(ssh ${USER}@${SERVER} df -h / --output=size -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
+    CURRENT_DISK_USAGE="$(ssh ${USER}@${SERVER} df -h / --output=used -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
+    CURRENT_DISK_PERCENTAGE="$(ssh ${USER}@${SERVER} df / --output=pcent -x tmpfs -x devtmpfs | tr -dc '0-9')"
+    TOTAL_FS_SIZE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $2}' | tail -1)"
+    CURRENT_FS_USAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $3}' | tail -1)"
+    CURRENT_FS_PERCENTAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $5}' | tail -1 | cut -d '%' -f 1)" 
+}
 
 #############################################################################
 #                       INFORMACIÓN POR PANTALLA                            #
@@ -498,7 +629,7 @@ function desc_metricas_cpu {
     	echo "TIEMPO ACTIVO:    ${UPTIME}"
     	echo "CPU:              ${COMPLETE_LOAD}"
     	if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_CPU_NUMBER}" ]; then
-		echo "ESTADO CPU:	OK"
+		echo "ESTADO CPU: OK"
 		echo "OK" > /home/ansible/robocop/monit/status_cpu.log
     	else
 		echo "ESTADO CPU:	KO"
@@ -518,6 +649,88 @@ function desc_ping {
     fi
 	
 }
+
+function desc_metricas_mem {
+    reunir_info_servidor
+    reunir_metricas_memoria
+    reunir_metricas_threshold
+
+    # salida por línea de comandos
+    
+    echo "HOST:             ${HOSTNAME}"
+    echo "TIEMPO ACTIVO:    ${UPTIME}"
+    echo "MEMORIA:          ${USED_MEMORY}M / ${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)"
+
+   if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_MEMORY_NUMBER}" ]; then
+            echo "ESTADO MEMORIA:       OK"
+            echo "OK" > /home/ansible/robocop/monit/status_mem.log
+    else
+            echo "ESTADO MEMORIA:       KO"
+            echo "ALERTA!! REVISAD CUANTO ANTES"
+            echo "KO" > /home/ansible/robocop/monit/status_mem.log
+    fi
+
+    # salir cuando esté hecho
+    exit 0
+   
+}
+
+function desc_caracteristicas_info {
+    # requerimientos de la función
+    reunir_info_servidor
+    reunir_info_red
+    reunir_info_distro
+    reunir_metricas_cpu
+    reunir_metricas_memoria
+    reunir_metricas_disco
+
+    # descripción general del servidor de salida por línea de comando
+    echo "SISTEMA"
+    echo "HOST:             ${HOSTNAME}"
+    echo "OS:               ${OPERATING_SYSTEM}"
+    echo "DISTRO:           ${DISTRO} ${DISTRO_VERSION}"
+    echo "KERNEL:           ${KERNEL_NAME} ${KERNEL_VERSION}"
+    echo "ARQUITECTURA:     ${ARCHITECTURE}"
+    echo "TIEMPO ACTIVO:    ${UPTIME}"
+    echo
+    echo 'IP INTERNA:'
+    printf '%s\n'           ${INTERNAL_IP_ADDRESS}
+    echo
+    echo "IP EXTERNA:       ${EXTERNAL_IP_ADDRESS}"
+    echo
+    echo 'PERFORMANCE SERVIDOR'
+    echo "CPU:           ${COMPLETE_LOAD}"
+    echo "MEMORIA:       ${USED_MEMORY}M / ${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)"
+    echo "DISCO:         ${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)"
+
+    # salir cuando esté hecho
+    exit 0
+}
+
+function desc_metricas_disk {
+        # requerimientos de la función
+        reunir_info_servidor
+        reunir_metricas_disco
+        reunir_metricas_threshold
+
+        # salida por línea de comandos
+        echo "HOST:             ${HOSTNAME}"
+        echo "TIEMPO ACTIVO:    ${UPTIME}"
+        echo "DISCO:            ${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)"
+	echo "FS ${FS}:		${CURRENT_FS_USAGE} / ${TOTAL_FS_SIZE} (${CURRENT_FS_PERCENTAGE}%)"
+        if [ "${CURRENT_FS_PERCENTAGE}" -lt "${THRESHOLD_DISK_NUMBER}" ]; then
+		echo "ESTADO FS ${FS}: OK"
+                echo "OK" > /home/ansible/robocop/monit/status_fs.log
+        else
+                echo "ESTADO FS ${FS}:       KO"
+                echo "ALERTA!! REVISAD CUANTO ANTES"
+                echo "KO" > /home/ansible/robocop/monit/status_fs.log
+        fi
+
+    # salir cuando esté hecho
+    exit 0
+}
+
 
 #############################################################################
 #                       FUNCIONES DE GESTIÓN                                #
@@ -649,7 +862,11 @@ function robocop_cron {
     echo "[?] ¿Quieres configurar la monitorización de CPU? (si/no)"
     read CRON_CPU
     echo "[?] ¿Quieres configurar el ping? (si/no)"
-    read CRON_PING	
+    read CRON_PING
+    echo "[?] ¿Quieres configurar la monitorización de Memoria? (si/no)"
+    read CRON_MEMORY	
+    echo "[?] ¿Quieres configurar la monitorización de los FS? (si/no)"
+    read CRON_FS
 
     if [ "${ROBOCOP_UPGRADE}" == 'yes' ]; then
         echo '[+] Actualización de cronjob para la actualización automática de robocop...'
@@ -667,9 +884,22 @@ function robocop_cron {
         echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_PING_TIME} ansible /usr/bin/robocop --metrics --ping --server ${SERVER} >> /tmp/prueba_ping.txt" >> /etc/cron.d/robocop_ping_${SERVER}
     fi
 
-    if [ "${OVERVIEW_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en Telegram...'
-        echo -e "# Este cronjob activa la descripción general automatizada del servidor en Telegram en el horario elegido\n${OVERVIEW_CRON} root /usr/bin/robocop --overview --robocop" > /etc/cron.d/robocop_overview_telegram
+    if [ "${CRON_MEMORY}" == 'si' ]; then
+        echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
+        echo "[i] Por defecto se ejecuta cada minuto"
+        echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_MEMORY_TIME} ansible /usr/bin/robocop --metrics --memory --server ${SERVER} >> /tmp/prueba_memory.txt" >> /etc/cron.d/robocop_memory_${SERVER}
+    fi
+
+    if [ "${CRON_FS}" == 'si' ]; then
+        echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
+        echo "[i] Por defecto se ejecuta cada minuto"
+	while [ ${CRON_FS} == "si" ]
+	do	
+		echo "[?] ¿Qué FS quieres configurar?"
+		read FS
+		echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_FS_TIME} ansible /usr/bin/robocop --metrics --fs ${FS} --server ${SERVER} >> /tmp/prueba_fs.txt" >> /etc/cron.d/robocop_fs_${SERVER}
+		read -r -p '[?] ¿Quieres configurar otro FS? (si/no): ' CRON_FS
+	done
     fi
     #if [ "${OVERVIEW_EMAIL}" == 'yes' ]; then
     #    echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en el correo electrónico...'
@@ -802,26 +1032,30 @@ function robocop_main {
         desc_caracteristicas_telegram
     elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
+        desc_metricas_mem
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_CPU}" == '1' ]; then
         desc_metricas_cpu
     elif [ "${ARGUMENT_CPU}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         envio_telegram
     elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_alerta_cli
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
-        desc_alerta_telegram
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
+    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
+        desc_caracteristicas_info
+    elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
+        desc_metricas_disk
+    elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
         desc_updates_cli
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_updates_telegram
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
-    elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_eol_cli
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_eol_telegram
     elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then

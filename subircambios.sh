@@ -21,5 +21,5 @@ git add .
 echo "Añadimos el comentario al commit "$var2
 git commit -m $var2
 echo "Por último, hacemos el push al servidor git"
-git push origin master
+git push origin stable
 echo "Los ficheros se han subido correctamente"
