@@ -22,6 +22,7 @@ ROBOCOP_VERSION='1.0'
 
 #Mensaje de comprobación
 MENSAJE="He sido configurado"
+TIME_FOLDER=/home/ansible/robocop/monit/time/3s
 ERROR_ENVIO=1
 AUTOCRON=0
 DATE=$(date)
@@ -33,25 +34,29 @@ ARGUMENT_FS=0
 ARGUMENT_INFO=0
 ARGUMENT_FS=0
 USER_ROBOCOP=$(cut -d':' -f1 /etc/passwd | grep -i robocop)
+MONIT_TIME=3s
 
 # Creamos la estructura de carpetas
 if [ -d /home/ansible/robocop ]; then
 	if [ -f /home/ansible/robocop/logs/robocop.log ] && [ -f /home/ansible/robocop/conf/robocop.conf ]; then
 		source /home/ansible/robocop/conf/robocop.conf
 		echo "${DATE} Llamada a Robocop...">>/home/ansible/robocop/logs/robocop.log
+		
 	else
 		mkdir /home/ansible/robocop/logs
 		touch /home/ansible/robocop/logs/robocop.log
 		touch /home/ansible/robocop/logs/robocop_telegram.log
-		chmod 755 /home/ansible/robocop/logs
+		chmod  755 /home/ansible/robocop/logs
 		chown -R ansible:ansible /home/ansible/robocop/logs
 		mkdir /home/ansible/robocop/conf
-                chmod 755 /home/ansible/robocop/conf
-                cp /home/ansible/robocop/robocop.conf /home/ansible/robocop/conf/robocop.conf
-                chown -R ansible:ansible /home/ansible/robocop/conf
+        	chmod 755 /home/ansible/robocop/conf
+        	cp /home/ansible/robocop/robocop.conf /home/ansible/robocop/conf/robocop.conf
+        	chown -R ansible:ansible /home/ansible/robocop/conf
 		source /home/ansible/robocop/conf/robocop.conf
 		mkdir /home/ansible/robocop/monit
-		chmod 755 /home/ansible/robocop/conf
+		mkdir /home/ansible/robocop/monit/exe
+		mkdir /home/ansible/robocop/monit/time
+		chmod -R 755 /home/ansible/robocop/monit
 		chown -R ansible:ansible /home/ansible/robocop/monit
 
 	fi
@@ -102,7 +107,16 @@ while test -n "$1"; do
             ARGUMENT_OPTION='1'
             shift
             ;;
-
+	--start)
+	    ARGUMENT_START='1'
+	    ARGUMENT_OPTION='1'
+	    shift
+  	    ;;
+	--stop)
+	    ARGUMENT_STOP='1'
+	    ARGUMENT_OPTION='1'   				 
+	    shift
+	    ;;
         --uninstall)
             ARGUMENT_UNINSTALL='1'
             ARGUMENT_OPTION='1'
@@ -178,6 +192,12 @@ while test -n "$1"; do
 	    ARGUMENT_PING='1'
 	    shift
 	    ;;
+	--service|-service|service)
+	    ARGUMENT_SERVICE='1'
+	    ARGUMENT_FEATURE='1'
+	    SERVICE=$2
+	    shift
+	    ;;
 	
         # otro
         *)
@@ -202,7 +222,7 @@ function robocop_install {
 	else
         	mkdir /home/ansible/robocop
 	fi
-
+	
 
 	# Colocamos la última versión del fichero de configuración en su ubicación
 	#wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.conf -O /etc/robocop/robocop.conf
@@ -408,6 +428,31 @@ function desc_metricas_telegram {
 
         fi
      fi
+
+     if [ ${ARGUMENT_SERVICE} == '1' ]; then
+        reunir_ping
+        STATUS_PING=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        else
+                reunir_info_servidor
+		reunir_metricas_serv
+                STATUS=$(grep 'OK\|KO' /home/ansible/robocop/monit/status_service_${SERVICE}.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - El servicio ${SERVICE} está levantado."
+                else
+                        STATUS="<b>ALARMA!!</b> El servicio ${SERVICE} está caído y no puedo levantarlo. Revisad lo antes posible"
+                fi
+
+
+                MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo:</b>          <code>${UPTIME}</code>\\n\\n<b>SERVICIO:</b>          <code>${SERVICE}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        fi
+     fi
+
 }
 
 function envio_telegram {
@@ -427,6 +472,21 @@ function envio_telegram {
 }
 
 #############################################################################
+#                           FUNCIÓN MONIT	                            #
+#############################################################################
+
+function monit_job {
+	echo "#!/bin/bash">/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	echo "while true">>/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	echo "do">>/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	echo "	sleep ${MONIT_TIME}">>/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	echo "	/home/ansible/robocop/monit/time/${MONIT_TIME}/*">>/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	echo "done">>/home/ansible/robocop/monit/exe/${MONIT_TIME}
+	chmod 755 /home/ansible/robocop/monit/exe/${MONIT_TIME}
+}
+
+
+#############################################################################
 #                           FUNCIONES GENERALES                             #
 #############################################################################
 
@@ -444,11 +504,31 @@ function update_os {
     fi
 }
 
-#function ficheros_conf {
-#	
-#	#Servidores CPU -> Cuando se cree un servidor a monitorizar la CPU se añade al fichero
-#	
-#}
+function start {
+	NUM=0
+
+	while [ $NUM -le 60 ]; do
+
+    		if [ -f /home/ansible/robocop/monit/exe/${NUM}s ]; then
+        		/home/ansible/robocop/monit/exe/${NUM}s &
+    		fi
+    		if [ -f /home/ansible/robocop/monit/exe/${NUM}m ]; then
+        		/home/ansible/robocop/monit/exe/${NUM}m &
+    		fi
+		if [ -f /home/ansible/robocop/monit/exe/${NUM}h ]; then
+			/home/ansible/robocop/monit/exe/${NUM}h &
+		fi
+		if [ -f /home/ansible/robocop/monit/exe/${NUM}d ]; then
+                        /home/ansible/robocop/monit/exe/${NUM}d &
+                fi
+
+    		let NUM=$NUM+1
+	done
+}
+
+function stop {
+	kill $(ps -ef | grep -i robocop | awk '{print $2}')>>/home/ansible/robocop/logs/robocop.log 2>&1
+}
 
 #############################################################################
 #                       FUNCIONES DE ERROR                                  #
@@ -614,6 +694,11 @@ function reunir_metricas_disco {
     CURRENT_FS_PERCENTAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $5}' | tail -1 | cut -d '%' -f 1)" 
 }
 
+function reunir_metricas_serv {
+    # métricas de servicio
+    SERVICE_RUN=$(ssh ${USER}@${SERVER} pgrep ${SERVICE} -c) 
+}
+
 #############################################################################
 #                       INFORMACIÓN POR PANTALLA                            #
 #############################################################################
@@ -731,7 +816,33 @@ function desc_metricas_disk {
     exit 0
 }
 
-
+function desc_service {
+	reunir_info_servidor
+	reunir_metricas_serv
+	if [ ${SERVICE_RUN} -gt '0' ]; then
+		echo "ESTADO SERVICIO ${SERVICE}:	OK"
+		echo "OK" > /home/ansible/robocop/monit/status_service_${SERVICE}.log
+	else
+		CONT=1
+		until [ $CONT -lt '1' ]
+		do
+  			sudo systemctl start ${SERVICE}
+			reunir_metricas_serv
+  			if [ ${SERVICE_RUN} -gt '0' ]; then
+				echo "ESTADO SERVICIO ${SERVICE}:       OK"
+		                echo "OK" > /home/ansible/robocop/monit/status_service_${SERVICE}.log
+				CONT=0
+			else
+				let CONT=CONT+1
+				echo "ESTADO SERVICIO ${SERVICE}:	KO"
+				echo "ALERTA!! REVISAD CUANTO ANTES. NO HE PODIDO LEVANTARLO"
+				echo "KO" > /home/ansible/robocop/monit/status_service_${SERVICE}.log
+			fi
+		done
+		
+	fi
+		
+}
 #############################################################################
 #                       FUNCIONES DE GESTIÓN                                #
 #############################################################################
@@ -853,12 +964,41 @@ function borrar_cron {
 
 function robocop_cron {
 
-    echo '*** ACTUALIZACIÓN DE CRONJOBS ***'
+    echo '*** ACTUALIZACIÓN DE JOBS AUTOMÁTICOS ***'
    
-    # actualizar tareas automatizadas de cronjobs
-    
+    # actualizar tareas automatizadas
+
     echo "[?] ¿En qué servidor quieres configurar CRON? "
-    read SERVER 
+    read SERVER
+    echo "[?] ¿Quieres que la monitorización se ejecute en un momento concreto? 1 vez al día, cada 2 horas... Por defecto refresca cada 3 segundos (si/no)"
+    read OPT
+	if [ ${OPT} == "si" ]; then
+		echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: 3s)"
+	        echo "[i] Por defecto se ejecuta cada 3 segundos"
+        	echo "[?] a) Segundos"
+        	echo "[?] b) Minutos"
+        	echo "[?] c) Horas"
+        	echo "[?] d) Días"
+        	echo "[?] e) Default"
+        	read OPT
+        	opt_time
+		monit_job
+	else
+		if [ -d /home/ansible/robocop/monit/time/3s ]; then
+			echo "El directorio existe...">>/home/ansible/robocop/logs/robocop.log
+			if [ -f /home/ansible/robocop/monit/exe/3s ]; then
+				echo "El fichero existe...">>/home/ansible/robocop/logs/robocop.log 
+			else
+				monit_job
+			fi
+		else
+			mkdir /home/ansible/robocop/monit/time/3s
+			touch /home/ansible/robocop/monit/time/3s/${SERVER}
+			chmod 755 -R /home/ansible/robocop/monit/time/3s
+			monit_job
+		fi
+	fi
+
     echo "[?] ¿Quieres configurar la monitorización de CPU? (si/no)"
     read CRON_CPU
     echo "[?] ¿Quieres configurar el ping? (si/no)"
@@ -867,40 +1007,60 @@ function robocop_cron {
     read CRON_MEMORY	
     echo "[?] ¿Quieres configurar la monitorización de los FS? (si/no)"
     read CRON_FS
+    echo "[?] ¿Quieres configurar la monitorización de los servicios (si/no)"
+    read CRON_SERV
 
     if [ "${ROBOCOP_UPGRADE}" == 'yes' ]; then
         echo '[+] Actualización de cronjob para la actualización automática de robocop...'
         echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido\n${ROBOCOP_UPGRADE_CRON} root /usr/bin/robocop --silent-upgrade" > /etc/cron.d/robocop_upgrade
     fi
     if [ "${CRON_CPU}" == 'si' ]; then
-	echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
-        echo "[i] Por defecto se ejecuta cada minuto"
-	echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_CPU_TIME} ansible /usr/bin/robocop --metrics --cpu --server ${SERVER} >> /tmp/prueba_cpu.txt" >> /etc/cron.d/robocop_cpu_${SERVER}
-
+	if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+		grep -i -v "cpu" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+        	mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+	fi
+	echo -e "# Este job activa la actualización automática de CPU en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --cpu --server ${SERVER} >> /tmp/prueba_cpu.txt" >> ${TIME_FOLDER}/${SERVER}
+	chmod -R 755 ${TIME_FOLDER}
     fi
     if [ "${CRON_PING}" == 'si' ]; then
-	echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
-        echo "[i] Por defecto se ejecuta cada minuto"
-        echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_PING_TIME} ansible /usr/bin/robocop --metrics --ping --server ${SERVER} >> /tmp/prueba_ping.txt" >> /etc/cron.d/robocop_ping_${SERVER}
+    	if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+		grep -i -v "ping" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+        	mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+	fi
+        echo -e "# Este cronjob activa la actualización automática de PING en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --ping --server ${SERVER} >> /tmp/prueba_ping.txt" >> ${TIME_FOLDER}/${SERVER}
+	chmod -R 755 ${TIME_FOLDER}
     fi
 
     if [ "${CRON_MEMORY}" == 'si' ]; then
-        echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
-        echo "[i] Por defecto se ejecuta cada minuto"
-        echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_MEMORY_TIME} ansible /usr/bin/robocop --metrics --memory --server ${SERVER} >> /tmp/prueba_memory.txt" >> /etc/cron.d/robocop_memory_${SERVER}
+        if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+		grep -i -v "memor" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+        	mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+	fi
+	echo -e "# Este job activa la actualización automática de MEMORIA en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --memory --server ${SERVER} >> /tmp/prueba_memory.txt" >> ${TIME_FOLDER}/${SERVER}
+	chmod -R 755 ${TIME_FOLDER}
     fi
 
     if [ "${CRON_FS}" == 'si' ]; then
-        echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: * * * * *)"
-        echo "[i] Por defecto se ejecuta cada minuto"
 	while [ ${CRON_FS} == "si" ]
-	do	
+	do
 		echo "[?] ¿Qué FS quieres configurar?"
 		read FS
-		echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido del servidor ${SERVER}\n${CRON_FS_TIME} ansible /usr/bin/robocop --metrics --fs ${FS} --server ${SERVER} >> /tmp/prueba_fs.txt" >> /etc/cron.d/robocop_fs_${SERVER}
+		echo -e "# Este job activa la actualización automática del FS ${FS} en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --fs ${FS} --server ${SERVER} >> /tmp/prueba_fs.txt" >> ${TIME_FOLDER}/${SERVER}
+		chmod -R 755 ${TIME_FOLDER}
 		read -r -p '[?] ¿Quieres configurar otro FS? (si/no): ' CRON_FS
 	done
     fi
+    if [ "${CRON_SERV}" == 'si' ]; then
+        while [ ${CRON_SERV} == "si" ]
+        do
+                echo "[?] ¿Qué SERVICIO quieres configurar?"
+                read SERVICE
+                echo -e "# Este job activa la actualización automática del servicio ${SERVICE} en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --service ${SERVICE} --server ${SERVER} >> /tmp/prueba_service.txt" >> ${TIME_FOLDER}/${SERVER}
+                chmod -R 755 ${TIME_FOLDER}
+                read -r -p '[?] ¿Quieres configurar otro SERVICIO? (si/no): ' CRON_SERV
+        done
+    fi
+
     #if [ "${OVERVIEW_EMAIL}" == 'yes' ]; then
     #    echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en el correo electrónico...'
     #    echo -e "# Este cronjob activa la descripción general automática del servidor en el correo electrónico en el horario elegido\n${OVERVIEW_CRON} root /usr/bin/robocop --overview --email" > /etc/cron.d/robocop_overview_email
@@ -941,21 +1101,58 @@ function robocop_cron {
         exit 0
     fi
 
-    # reinicie cron para efectuar realmente los nuevos cronjobs
-    echo '[+] Reiniciando el servicio cron...'
-    if [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-        systemctl restart crond.service
-    elif [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "yum" ]; then
-        systemctl restart crond.service
-    elif [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        systemctl restart cron.service
-    elif [ "${SERVICE_MANAGER}" == "service" ] && [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        service cron restart
-    #elif [ "${SERVICE_MANAGER}" == "rc-service" ] && [ "${PACKAGE_MANAGER}" == "apk" ]; then
-    #    rc-service cron start # No estoy seguro si esto es correcto
-    fi
     echo '[i] HECHO!'
     exit 0
+}
+
+#############################################################################
+#                     	FUNCIÓN DE OPCIONES   		                    #
+#############################################################################
+
+function opt_time {
+	case $OPT in
+
+  		a)
+    		echo "[?] ¿Cada cuántos segundos quieres ejecutarlo?"
+		read TIME
+		mkdir /home/ansible/robocop/monit/time/${TIME}s
+		TIME_FOLDER=/home/ansible/robocop/monit/time/${TIME}s
+		MONIT_TIME=${TIME}s
+		;;
+
+  		b)
+    		echo "[?] ¿Cada cuántos minutos quieres ejecutarlo?"
+                read TIME
+                mkdir /home/ansible/robocop/monit/time/${TIME}m
+                TIME_FOLDER=/home/ansible/robocop/monit/time/${TIME}m
+                MONIT_TIME=${TIME}m
+                ;;
+
+  		c)
+    		echo "[?] ¿Cada cuántas horas quieres ejecutarlo?"
+                read TIME
+                mkdir /home/ansible/robocop/monit/time/${TIME}h
+                TIME_FOLDER=/home/ansible/robocop/monit/time/${TIME}h
+                MONIT_TIME=${TIME}h
+                ;;
+
+		d)
+		echo "[?] ¿Cada cuántos días quieres ejecutarlo?"
+                read TIME
+                mkdir /home/ansible/robocop/monit/time/${TIME}d
+                TIME_FOLDER=/home/ansible/robocop/monit/time/${TIME}d
+                MONIT_TIME=${TIME}d
+                ;;
+		
+		e)
+                echo "[i] Se ejecutará cada 3s tal como se establece por defecto"
+                ;;
+
+  		*)
+    		echo "[!] No es un valor correcto, se ejecutará cada 3s"
+    		;;
+	esac
+
 }
 
 #############################################################################
@@ -1024,14 +1221,18 @@ function robocop_main {
         robocop_install_check
     elif [ "${ARGUMENT_UNINSTALL}" == '1' ]; then
         robocop_uninstall
+    elif [ "${ARGUMENT_START}" == '1' ]; then
+	start
+    elif [ "${ARGUMENT_STOP}" == '1' ]; then
+	stop
     elif [ "${ARGUMENT_PING}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
 	desc_ping
     elif [ "${ARGUMENT_PING}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         envio_telegram
     elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_caracteristicas_telegram
-    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_SERVICE}" == '1' ]; then
+        desc_service
     elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
         desc_metricas_mem
     elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
@@ -1048,8 +1249,8 @@ function robocop_main {
         desc_metricas_disk
     elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         envio_telegram
-    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_updates_cli
+    elif [ "${ARGUMENT_SERVICE}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_updates_telegram
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then

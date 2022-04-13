@@ -1,2 +1,0 @@
-# Este cronjob activa la actualización automática de CPU con robocop 
-* * * * * ansible /usr/bin/robocop --metrics --cpu --server appdb >> /tmp/prueba.txt /etc/cron.d/robocop_cpu
