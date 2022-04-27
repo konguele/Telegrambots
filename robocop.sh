@@ -2,7 +2,7 @@
 
 #############################################################################
 #                       Version 1.0.0 (21/03/2022)                          #
-#############################################################################
+############################################################################
 
 #############################################################################
 # Copyright 2022 Juanjo García. Propiedad de Stilu Group
@@ -14,47 +14,23 @@
 #############################################################################
 
 #############################################################################
-#                              VARIABLES                                    #                     
+#                              VARIABLES                                    #
 #############################################################################
 
 # Versión Robocop
 ROBOCOP_VERSION='1.0'
 
-# comprobar si robocop.conf está disponible y añadir el source
-if [ -f /etc/robocop/robocop.conf ]; then
-    source /etc/robocop/robocop.conf
-    # comprobar si se ha configurado el Telegram
-    if [ "${TELEGRAM_TOKEN}" == 'poner_token' ]; then
-        METHOD_ROBOCOP='disabled'
-    fi
-else
-    # de lo contrario, deshabilite estas opciones, características y métodos
-    ROBOCOP_CONFIG='disabled' # no funcionará sin robocop.conf
-    METHOD_ROBOCOP='disabled' # no funcionará sin robocop.conf
-    METHOD_EMAIL='disabled' # no funcionará sin robocop.conf
-
-    # y utilice estos valores predeterminados para los parámetros del umbral de alerta
-    THRESHOLD_CPU='90%'
-    THRESHOLD_MEMORY='80%'
-    THRESHOLD_DISK='80%' #añadir los diferentes FS
-
-    # y por defecto a la rama estable
-    ROBOCOP_BRANCH='unstable'
+USER_ROBOCOP=$(cut -d':' -f1 /etc/passwd | grep -i robocop)
+SERVER=$(hostname)
+if [ -f /usr/bin/robocop_source ]; then
+        source /home/ansible/git/Telegrambots/robocop/conf/robocop.conf 1>/dev/null 2>&1
 fi
-
+TIME_FOLDER=${HOME_DIRECTORY}monit/time/3s
 #############################################################################
 #                               ARGUMENTS                                   #
 #############################################################################
 
-# guardar la cantidad de argumentos para la verificación de validez
-ARGUMENTS="${#}"
-
-# rellenar las variables de validación con 0
-ARGUMENT_OPTION='0'
-ARGUMENT_FEATURE='0'
-ARGUMENT_METHOD='0'
-
-# habilitar la ayuda, la versión y una opción cli
+# habilitar todas las opciones
 while test -n "$1"; do
     case "$1" in
         # options
@@ -63,9 +39,19 @@ while test -n "$1"; do
             ARGUMENT_OPTION='1'
             shift
             ;;
-
+        --info|-info)
+            ARGUMENT_INFO='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
         --help|-help|help|--h|-h)
             ARGUMENT_HELP='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+
+        --install|install|-i)
+            ARGUMENT_INSTALL='1'
             ARGUMENT_OPTION='1'
             shift
             ;;
@@ -75,51 +61,28 @@ while test -n "$1"; do
             ARGUMENT_OPTION='1'
             shift
             ;;
-
-        --validate)
-            ARGUMENT_VALIDATE='1'
-            ARGUMENT_OPTIONS='1'
-            shift
-            ;;
-        
-        --knownusers)
-            ARGUMENT_KNOWNUSER='1'
-            ARGUMENT_OPTIONS='1'
-            shift
-            ;;
-
-        --install)
-            ARGUMENT_INSTALL='1'
+        --start)
+            ARGUMENT_START='1'
             ARGUMENT_OPTION='1'
             shift
             ;;
-
-        --upgrade)
-            ARGUMENT_UPGRADE='1'
+        --stop)
+            ARGUMENT_STOP='1'
             ARGUMENT_OPTION='1'
             shift
             ;;
-
-        --silent-upgrade)
-            ARGUMENT_SILENT_UPGRADE='1'
-            ARGUMENT_OPTION='1'
-            shift
-            ;;
-
-        --self-upgrade)
-            ARGUMENT_SELF_UPGRADE='1'
-            ARGUMENT_OPTION='1'
-            shift
-            ;;
-
-        --addserver)
-            ARGUMENT_ADD_SERVER='1'
-            ARGUMENT_OPTION='1'
-            shift
-            ;;
-
         --uninstall)
             ARGUMENT_UNINSTALL='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+        --maintenance)
+            ARGUMENT_MAINTENANCE='1'
+            ARGUMENT_OPTION='1'
+            shift
+            ;;
+        --delete)
+            ARGUMENT_DELETE='1'
             ARGUMENT_OPTION='1'
             shift
             ;;
@@ -136,7 +99,6 @@ while test -n "$1"; do
             ARGUMENT_FEATURE='1'
             shift
             ;;
-
         --alert|alert)
             ARGUMENT_ALERT='1'
             ARGUMENT_FEATURE='1'
@@ -145,12 +107,6 @@ while test -n "$1"; do
 
         --updates|updates)
             ARGUMENT_UPDATES='1'
-            ARGUMENT_FEATURE='1'
-            shift
-            ;;
-
-        --eol|eol)
-            ARGUMENT_EOL='1'
             ARGUMENT_FEATURE='1'
             shift
             ;;
@@ -174,6 +130,55 @@ while test -n "$1"; do
             shift
             ;;
 
+        # metrics
+        --cpu|-cpu|cpu)
+            ARGUMENT_CPU='1'
+            ARGUMENT_FEATURE='1'
+            shift
+            ;;
+        --memory|-mem|memory|mem)
+            ARGUMENT_MEMORY='1'
+            ARGUMENT_FEATURE='1'
+            shift
+            ;;
+        --fs|-fs|fs)
+            ARGUMENT_FS='1'
+            ARGUMENT_FEATURE='1'
+            FS=$2
+            shift
+            ;;
+        --server)
+            AUTOCRON='1'
+            SERVER=$2
+            shift
+            ;;
+        --ping)
+            ARGUMENT_PING='1'
+            shift
+            ;;
+        --service|-service|service)
+            ARGUMENT_SERVICE='1'
+            ARGUMENT_FEATURE='1'
+            SERVICE=$2
+            PROCESS=$3
+            shift
+            ;;
+        --url)
+            ARGUMENT_WEB='1'
+            WEBSITE=$2
+            shift
+            ;;
+        --time|-time|time)
+            ARGUMENT_TIME='1'
+            MAINT_TIME=$2
+            shift
+            ;;
+        --update|-update|update)
+            ARGUMENT_UPDATE='1'
+            ARGUMENT_FEATURE='1'
+            shift
+            ;;
+
         # otro
         *)
             ARGUMENT_NONE='1'
@@ -183,11 +188,601 @@ while test -n "$1"; do
 done
 
 #############################################################################
+#                               INSTALADOR                                  #
+#############################################################################
+
+function robocop_install {
+        internet_requerido
+
+        # Comprobamos que exista el home directory
+        source robocop.conf
+        if [ "${HOME_DIRECTORY}" == "poner_directorio" ]; then
+                echo "[?] ¿En qué directorio vas a instalar Robocop?"
+                read HOME_DIRECTORY
+                #cp ${HOME_DIRECTORY}robocop.conf ${HOME_DIRECTORY}conf/robocop.conf
+                #sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
+                #source ${HOME_DIRECTORY}conf/robocop.conf
+        fi
+
+
+        # Creamos la estructura de carpetas
+        if [ -d ${HOME_DIRECTORY} ]; then
+                if [ -f ${HOME_DIRECTORY}logs/robocop.log ] && [ -f ${HOME_DIRECTORY}conf/robocop.conf ]; then
+                        source ${HOME_DIRECTORY}conf/robocop.conf
+                        echo "${DATE} Llamada a Robocop...">>${HOME_DIRECTORY}logs/robocop.log
+
+                else
+                        mkdir ${HOME_DIRECTORY}logs
+                        touch ${HOME_DIRECTORY}logs/robocop.log
+                        touch ${HOME_DIRECTORY}logs/robocop_telegram.log
+                        chmod  755 ${HOME_DIRECTORY}logs
+                        chown -R ansible:ansible ${HOME_DIRECTORY}logs
+                        mkdir ${HOME_DIRECTORY}conf
+                        chmod 755 ${HOME_DIRECTORY}conf
+                        cp robocop.conf ${HOME_DIRECTORY}conf/robocop.conf
+                        chown -R ansible:ansible ${HOME_DIRECTORY}conf
+                        mkdir ${HOME_DIRECTORY}monit
+                        mkdir ${HOME_DIRECTORY}monit/exe
+                        mkdir ${HOME_DIRECTORY}monit/time
+                        mkdir ${HOME_DIRECTORY}monit/maintenance
+                        chmod -R 755 ${HOME_DIRECTORY}monit
+                        chown -R ansible:ansible ${HOME_DIRECTORY}monit
+
+                fi
+
+        else
+                mkdir ${HOME_DIRECTORY}
+                mkdir ${HOME_DIRECTORY}logs
+                mkdir ${HOME_DIRECTORY}conf
+                chmod 755 ${HOME_DIRECTORY}
+                cp ${HOME_DIRECTORY}robocop.conf /home/ansible/robocop/conf/robocop.conf
+                source ${HOME_DIRECTORY}conf/robocop.conf
+
+        fi
+
+
+        if [ "${USER_ROBOCOP}" == "robocop" ]; then
+                        echo "[i] Buen trabajo, el usuario robocop existe."
+                        echo "[!] No olvides compartir las ssh keys, para un correcto funcionamiento"
+        else
+                        echo "[?] El usuario robocop no existe, ¿con qué usuario deseas trabajar?"
+                        echo "[i] Recuerda que si no existe o no has compartido las ssh keys, no funcionará"
+                        read -r -p '[?] Añade el nombre del usuario: ' USER
+                        sed -i s%'robocop'%"${USER}"%g ${HOME_DIRECTORY}conf/robocop.conf
+                        sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
+        fi
+        reunir_info_distro
+
+        # Creamos la ubicación del fichero conf si no existe
+        if [ -d ${HOME_DIRECTORY} ]; then
+                echo "[+] El directorio ya está creado...">>${HOME_DIRECTORY}logs/robocop.log 2>&1
+        else
+                mkdir ${HOME_DIRECTORY}
+        fi
+
+
+        # Colocamos la última versión del fichero de configuración en su ubicación
+        #wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.conf -O /etc/robocop/robocop.conf
+        #chmod 755 /
+
+        # Instalamos el bot
+        if [ "${TOKEN}" == 'poner_token' ]; then
+                echo '                                                                                            '
+                echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
+                echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
+                echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
+                echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
+                echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
+                echo
+                echo "robocop ${ROBOCOP_VERSION}"
+                echo "Copyright 2022 Juanjo García. Propiedad de Stilu Group."
+                echo
+                echo "Creado por Juanjo García"
+                echo ""
+                echo ""
+                echo "[!] El barrio va a estar seguro, ROBOCOP ha llegado y se está instalando..."
+                echo ""
+                echo ""
+                echo ""
+                read -r -p '[?] Añade el TOKEN del bot: ' TOKEN
+                read -r -p '[?] Añade un CHAT ID (Después podrás añadir el resto):   ' CHAT_ID
+                sed -i s%'poner_token'%"${TOKEN}"%g ${HOME_DIRECTORY}conf/robocop.conf
+                sed -i s%'poner_id'%"${CHAT_ID}"%g ${HOME_DIRECTORY}conf/robocop.conf
+
+                # Actualizar SO
+                echo "[+] Instalando dependencias..."
+                echo "[+] instalando la última versión de ROBOCOP..."
+                #wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O /usr/bin/robocop
+                cp ${HOME_DIRECTORY}robocop.sh /usr/bin/robocop
+                touch /usr/bin/robocop_source
+                echo "source ${HOME_DIRECTORY}conf/robocop.conf" > /usr/bin/robocop_source
+                chmod 755 /usr/bin/robocop /usr/bin/robocop_source
+
+                # instalar dependencias para diferentes administradores de paquetes
+                if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
+                        dnf install wget bc --assumeyes --quiet
+                elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
+                        yum install wget bc --assumeyes --quiet
+                elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
+                        apt-get install aptitude bc curl --assume-yes --quiet
+                elif [ "${PACKAGE_MANAGER}" == "pkg" ]; then
+                        pkg install bc wget
+                fi
+
+                # Recargamos el source con los datos buenos
+                source ${HOME_DIRECTORY}conf/robocop.conf
+
+                #Enviamos mensaje de prueba
+                curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$MENSAJE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+                cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
+                ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
+                if [ ${ERROR_ENVIO} -ne 0 ]; then
+                        echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
+                        exit 0
+                else
+                        echo "[+] El mensaje ha sido enviado correctamente a Telegram"
+                fi
+
+                echo "[?] ¿Quieres configurar las alertas de CRON? (si/no): "
+                read CRON
+                if [ $CRON == 'si' ]; then
+                        /bin/bash /usr/bin/robocop --cron
+                fi
+
+        elif [ "${TOKEN}" == '' ]; then
+                echo "Algo ha salido mal, no se han cargado las variables de entorno. Las cargo y volvemos a empezar :)"
+                echo "Si vuelves a ver este mensaje, revisa que exista el fichero ${HOME_DIRECTORY}conf/robocop.conf"
+                source ${HOME_DIRECTORY}conf/robocop.conf
+
+        elif [ "${TOKEN}" != 'poner_token' ]; then
+                echo "Robocop está instalado y vigilando. Elige una opción o revisa robocop --help"
+                echo "Si por el contrario no está instalado y aparece este mensaje, utiliza robocop --uninstall o robocop -u para eliminar cualquier problema"
+
+        fi
+}
+
+#############################################################################
+#                           FUNCIÓN TELEGRAM                                #
+#############################################################################
+
+function desc_metricas_telegram {
+
+    if [ ${ARGUMENT_CPU} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        else
+                reunir_metricas_cpu
+                # crear mensaje para Telegram
+                STATUS=$(grep "OK\|KO" ${HOME_DIRECTORY}monit/status_cpu.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - CPU dentro de los umbrales acordados"
+                elif [ ${STATUS} == KO ]; then
+                        STATUS="<b>ALARMA!!</b> La CPU supera el umbral ${THRESHOLD_CPU}. Revisad lo antes posible"
+                fi
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>CPU</b>:         <code>${COMPLETE_LOAD}</code>\\n<b>Status:</b>      <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        fi
+    fi
+
+    if [ ${ARGUMENT_PING} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        # crear mensaje para Telegram
+        STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS} == OK  ]; then
+                STATUS="<b>OK</b> - El servidor ${SERVER} responde a ping correctamente"
+        else
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+        fi
+
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    fi
+
+    if [ ${ARGUMENT_MEMORY} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        else
+                reunir_metricas_memoria
+                # crear mensaje para Telegram
+                STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_mem.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - Memoria dentro de los umbrales acordados"
+                else
+                        STATUS="<b>ALARMA!!</b> La memoria supera el umbral del ${THRESHOLD_MEMORY}. Revisad lo antes posible"
+                fi
+
+                MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo</b>:          <code>${UPTIME}</code>\\n\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        fi
+
+    fi
+
+    if [ ${ARGUMENT_INFO} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        else
+                reunir_info_servidor
+                reunir_info_red
+                reunir_info_distro
+                reunir_metricas_cpu
+                reunir_metricas_memoria
+                source ${HOME_DIRECTORY}conf/robocop.conf
+
+                MESSAGE="$(echo -e "<b>-SISTEMA-</b>\\n<b>Host:</b>     <code>${HOSTNAME}</code>\\n<b>OS:</b>   <code>${OPERATING_SYSTEM}</code>\\n<b>Distro:</b>       <code>${DISTRO} ${DISTRO_VERSION}</code>\\n<b>Kernel:</b>   <code>${KERNEL_NAME} ${KERNEL_VERSION}</code>\\n<b>Arquitectura:</b>    <code>${ARCHITECTURE}</code>\\n<b>Tiempo Activo:</b>    <code>${UPTIME}</code>\\n\\n<b>-IP-</b>\\n<b>IP INTERNA:</b>     <code>${INTERNAL_IP_ADDRESS}</code>\\n<b>IP EXTERNA:</b>     <code>${EXTERNAL_IP_ADDRESS}</code>\\n\\n<b>-PERFORMANCE DEL SERVIDOR-</b>\\n<b>CPU:</b>     <code>${COMPLETE_LOAD}</code>\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        fi
+     fi
+
+     if [ ${ARGUMENT_FS} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        else
+                reunir_info_servidor
+                reunir_metricas_disco
+                reunir_metricas_threshold
+
+                STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_fs.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - El FileSystem ${FS} está dentro de los umbrales acordados."
+                else
+                        STATUS="<b>ALARMA!!</b> El FS ${FS} supera el umbral del ${THRESHOLD_DISK}. Revisad lo antes posible"
+                fi
+
+
+                MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo:</b>          <code>${UPTIME}</code>\\n\\n<b>Disco:</b>       <code>${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)</code>\\n<b>FS ${FS}:</b>          <code>${CURRENT_FS_USAGE} / ${TOTAL_FS_SIZE} (${CURRENT_FS_PERCENTAGE}%)</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        fi
+     fi
+
+     if [ ${ARGUMENT_SERVICE} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        else
+                reunir_info_servidor
+                reunir_metricas_serv
+                STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_service_${SERVICE}.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="<b>OK</b> - El servicio ${SERVICE} está levantado."
+                else
+                        STATUS="<b>ALARMA!!</b> El servicio ${SERVICE} está caído. Revisad lo antes posible"
+                fi
+
+
+                MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo:</b>          <code>${UPTIME}</code>\\n\\n<b>SERVICIO:</b>          <code>${SERVICE}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        fi
+     fi
+
+    if [ ${ARGUMENT_WEB} == '1' ]; then
+
+        #reunir_metricas_web
+        WEBSITE=$(echo ${WEBSITE} | cut -d "/" -f3)
+        if ping -q -c 1 -W 1 ${WEBSITE} >/dev/null; then
+                echo "OK" > ${HOME_DIRECTORY}monit/status_web.log
+        else
+                echo "KO" > ${HOME_DIRECTORY}monit/status_web.log
+        fi
+
+        # crear mensaje para Telegram
+        STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_web.log)
+        if [ ${STATUS} == OK  ]; then
+                STATUS="<b>OK</b> - La URL ${WEBSITE} responde correctamente"
+        else
+                STATUS="<b>KO</b> - La URL ${WEBSITE} está caído. Revisad lo antes posible!!!"
+        fi
+
+        MESSAGE="$(echo -e "<b>URL:</b>        <code>${WEBSITE}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    fi
+
+    if [ ${ARGUMENT_UPDATE} == '1' ]; then
+        reunir_ping
+        reunir_info_servidor
+        STATUS_PING=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_ping.log)
+        if [ ${STATUS_PING} == KO ]; then
+                STATUS="<b>KO</b> - El servidor ${SERVER} está caído. Revisad lo antes posible!!!"
+                MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        else
+                so_requerimientos
+                reunir_info_distro
+                reunir_info_servidor
+                reunir_pending_updates
+                # crear mensaje para Telegram
+                STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_updates.log)
+                if [ ${STATUS} == OK  ]; then
+                        STATUS="NO tenemos actualizaciones pendientes para instalar"
+                else
+                        STATUS="SI tenemos actualizaciones pendientes. Se pueden instalar directamente desde Telegram con el comando /updates"
+                fi
+
+                MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo</b>:          <code>${UPTIME}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+        fi
+
+    fi
+
+
+
+    if [ ${MAINTENANCE} == '1' ]; then
+        STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_maintenance.log)
+        if [ ${STATUS} == OK ]; then
+                STATUS="El Servidor ${SERVER} ha entrado en mantenimiento durante ${MAINT_TIME}"
+        else
+                STATUS="El Servidor ${SERVER} ha salido de mantenimiento y vuelve a monitorizarse"
+        fi
+
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>MAINTENANCE:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    fi
+
+}
+
+function envio_telegram {
+
+        # Requerimientos de la función
+        desc_metricas_telegram
+        curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
+        ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
+        if [ ${ERROR_ENVIO} -ne 0 ]; then
+                echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
+                exit 0
+        fi
+
+
+}
+
+#############################################################################
+#                           FUNCIÓN MONIT                                   #
+#############################################################################
+
+function monit_job {
+        echo "#!/bin/bash">${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "while true">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "do">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "  sleep ${MONIT_TIME}">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "  ${HOME_DIRECTORY}monit/time/${MONIT_TIME}/*">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "done">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        chmod 755 ${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+}
+
+function maintenance_mode {
+        NUM=0
+        MAINT_LETTER=$(echo ${MAINT_TIME} | sed 's/[0-9]//g')
+        TIME=$(echo "${MAINT_TIME}" | sed -e 's/.$//')
+        echo "[i] El servidor ${SERVER} estará en mantenimiento durante ${MAINT_TIME}"
+        if [ ${MAINT_LETTER} == 's' ]; then
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} seconds" | cut -d " " -f 4)
+                echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
+        elif [ ${MAINT_LETTER} == 'm' ]; then
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} minutes" | cut -d " " -f 4)
+                echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
+        elif [ ${MAINT_LETTER} == 'h' ]; then
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} hours" | cut -d " " -f 4)
+                echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
+        elif [ ${MAINT_LETTER} == 'd' ]; then
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} days")
+                echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará el día ${FIN}"
+        fi
+        STATUS="El Servidor ${SERVER} ha entrado en mantenimiento durante ${MAINT_TIME}"
+
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>MAINTENANCE:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        curl -s -X POST $URL -d chat_id=$ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>/home/ansible/robocop/logs/robocop.log
+        ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
+        if [ ${ERROR_ENVIO} -ne 0 ]; then
+                echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
+                exit 0
+        fi
+
+        while [ $NUM -le 60 ]; do
+
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} ]; then
+                        if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}s ]; then
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}s/
+                        else
+                                mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}s
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}s/
+                        fi
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} ]; then
+                        if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}m ]; then
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}m/
+                        else
+                                mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}m
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}m/
+                        fi
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} ]; then
+                        if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}h ]; then
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}h/
+                        else
+                                mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}h
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}h/
+                        fi
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} ]; then
+                        if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}d ]; then
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}d/
+                        else
+                                mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}d
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}d/
+                        fi
+                fi
+
+
+               let NUM=$NUM+1
+        done
+        NUM=0
+        sleep ${MAINT_TIME}
+        while [ $NUM -le 60 ]; do
+                if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} ]; then
+                         if [ -d ${HOME_DIRECTORY}monit/time/${NUM}s ]; then
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                         else
+                                 mkdir ${HOME_DIRECTORY}monit/time/${NUM}s
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                         fi
+                 fi
+                 if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} ]; then
+                         if [ -d ${HOME_DIRECTORY}monit/time/${NUM}m ]; then
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} /home/ansible/robocop/monit/time/${NUM}m/
+                         else
+                                 mkdir ${HOME_DIRECTORY}monit/time/${NUM}m
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} /home/ansible/robocop/monit/time/${NUM}m/
+                         fi
+                 fi
+                 if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} ]; then
+                         if [ -d ${HOME_DIRECTORY}monit/time/${NUM}h ]; then
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} /home/ansible/robocop/monit/time/${NUM}h/
+                         else
+                                 mkdir ${HOME_DIRECTORY}monit/time/${NUM}h
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                         fi
+                 fi
+                 if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} ]; then
+                         if [ -d ${HOME_DIRECTORY}monit/time/${NUM}d ]; then
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} /home/ansible/robocop/monit/time/${NUM}d/
+                         else
+                                 mkdir ${HOME_DIRECTORY}monit/time/${NUM}d
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} /home/ansible/robocop/monit/time/${NUM}d/
+                         fi
+                 fi
+
+                 let NUM=$NUM+1
+           done
+        echo "[i] El servidor ${SERVER} ha finalizado el mantenimiento y volverá a monitorizarse. Si no has finalizado las tareas, vuelve a ejecutar el proceso"
+        STATUS="El Servidor ${SERVER} ha finalizado el mantenimiento y volverá a monitorizarse"
+
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>MAINTENANCE:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+        curl -s -X POST $URL -d chat_id=$ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>/home/ansible/robocop/logs/robocop.log
+        ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
+        if [ ${ERROR_ENVIO} -ne 0 ]; then
+                echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
+                exit 0
+        fi
+
+}
+
+#############################################################################
+#                           FUNCIONES GENERALES                             #
+#############################################################################
+
+function update_os {
+
+    # actualizar las distribuciones modernas basadas en rhel
+    if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
+        dnf update --assumeyes --quiet
+    # actualizar distribuciones antiguas basadas en rhel
+    elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
+        yum update --assumeyes --quiet
+    # actualizar las distribuciones basadas en debian
+    elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
+        apt-get update --quiet && apt-get upgrade --assume-yes --quiet
+    fi
+}
+
+function start {
+        NUM=0
+
+        while [ $NUM -le 60 ]; do
+
+                if [ -f ${HOME_DIRECTORY}monit/exe/${NUM}s ]; then
+                        ${HOME_DIRECTORY}monit/exe/${NUM}s &
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/exe/${NUM}m ]; then
+                        ${HOME_DIRECTORY}monit/exe/${NUM}m &
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/exe/${NUM}h ]; then
+                        ${HOME_DIRECTORY}monit/exe/${NUM}h &
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/exe/${NUM}d ]; then
+                        ${HOME_DIRECTORY}monit/exe/${NUM}d &
+                fi
+
+                let NUM=$NUM+1
+        done
+}
+
+function stop {
+        kill $(ps -ef | grep -i robocop | awk '{print $2}')>>${HOME_DIRECTORY}logs/robocop.log 2>&1
+}
+
+function delete {
+        NUM=0
+        echo "[i] Procedemos a borrar la monitorización del servidor ${SERVER}"
+        while [ $NUM -le 60 ]; do
+
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} ]; then
+                        rm -rf ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER}
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} ]; then
+                        rm -rf ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER}
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} ]; then
+                        rm -rf ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER}
+                fi
+                if [ -f ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} ]; then
+                        rm -rf ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER}
+                fi
+
+
+               let NUM=$NUM+1
+        done
+        echo "[i] Hemos borrado definitivamente toda la monitorización del servidor ${SERVER}"
+
+}
+#############################################################################
 #                       FUNCIONES DE ERROR                                  #
 #############################################################################
 
 function opcion_no_valida {
-    echo 'robocop: No es una opción válida. Prueba con otra'
+    echo 'robocop: No es una opción válida. Prueba a añadir algún argumento'
     echo "Usa 'robocop --help' para ver un listado de argumentos. Te ayudará a elegir la opción correcta"
     exit 1
 }
@@ -225,12 +820,6 @@ function opciones_no_combinan {
     exit 1
 }
 
-function no_privilegios {
-    echo 'robocop: Necesitas ser root para ejecutar estos comandos'
-    echo "usa 'sudo robocop', 'sudo -s' o ejecuta robocop como root."
-    exit 1
-}
-
 function no_internet {
     echo 'robocop: Se requiere acceso a internet. Comprueba que estés conectado.'
     exit 1
@@ -249,550 +838,18 @@ function email_deshabilitado {
     echo "robocop: el email del método no está disponible sin la configuración correcta en el archivo de configuración de robocop."
     exit 1
 }
-
-#############################################################################
-#                     REQUERIMIENTOS DE LAS FUNCIONES                       #
-#############################################################################
-
-function argumentos_validos {
-    # las características requieren métodos y viceversa
-    if [ "${ARGUMENT_FEATURE}" == '1' ] && [ "${ARGUMENT_METHOD}" == '0' ]; then
-        no_metodo
-    elif [ "${ARGUMENT_FEATURE}" == '0' ] && [ "${ARGUMENT_METHOD}" == '1' ]; then
-        no_metodo
-    # cantidad de argumentos menos de uno o más de dos dan como resultado un error
-    elif [ "${ARGUMENTS}" -eq '0' ] || [ "${ARGUMENTS}" -gt '2' ]; then
-        error_de_muchos_argumentos
-    # las opciones son incompatibles con las características
-    elif [ "${ARGUMENT_OPTION}" == '1' ] && [ "${ARGUMENT_FEATURE}" == '1' ]; then
-        opciones_no_combinan
-    # las opciones son incompatibles con los métodos
-    elif [ "${ARGUMENT_OPTION}" == '1' ] && [ "${ARGUMENT_METHOD}" == '1' ]; then
-        opciones_no_combinan
-    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${METHOD_ROBOCOP}" == 'disabled' ]; then
-        telegram_deshabilitado
-    elif [ "${ARGUMENT_EMAIL}" == '1' ] && [ "${METHOD_EMAIL}" == 'disabled' ]; then
-        email_deshabilitado
-    fi
-}
-
-function root_requerido {
-    # comprobar si el script se ejecuta como root
-    if [ "$EUID" -ne 0 ]; then
-        no_privilegios
-    fi
-}
-
-function so_requerimientos {
-    # compruebe si el administrador de paquetes compatible está instalado y complete las variables relevantes
-    if [ "$(command -v dnf)" ]; then
-        PACKAGE_MANAGER='dnf'
-    elif [ "$(command -v yum)" ]; then
-        PACKAGE_MANAGER='yum'
-    elif [ "$(command -v apt-get)" ]; then
-        PACKAGE_MANAGER='apt-get'
-    elif [ "$(command -v pkg)" ]; then
-        PACKAGE_MANAGER='pkg'
-    #elif [ "$(command -v apk)" ]; then
-        #PACKAGE_MANAGER='apk'
-    else
-        os_no_soportado
-    fi
-
-    # comprueba si el administrador de servicios compatible está instalado y complete las variables relevantes
-    # systemctl
-    if [ "$(command -v systemctl)" ]; then
-        SERVICE_MANAGER='systemctl'
-    # servicio
-    elif [ "$(command -v service)" ]; then
-        SERVICE_MANAGER='service'
-    # openrc
-    elif [ "$(command -v rc-service)" ]; then
-        SERVICE_MANAGER='openrc'
-    else
-        os_no_soportado
-    fi
-}
-
-function internet_requerido {
-    # check internet connection
-    if ping -q -c 1 -W 1 google.com >/dev/null; then
-        echo '[i] Info: el dispositivo está conectado a internet...'
-    else
-        no_internet
-    fi
-}
-
-#############################################################################
-#                       FUNCIONES DE GESTIÓN                                #
-#############################################################################
-
-function ROBOCOP_VERSION {
-    echo 
-    echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
-    echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
-    echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
-    echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
-    echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
-    echo
-    echo "robocop ${ROBOCOP_VERSION}"
-    echo "Copyright 2022 Juanjo García. Propiedad de Stilu Group."
-    echo
-    echo "Creado por Juanjo García"
-}
-
-function robocop_help {
-    echo 
-    echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
-    echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
-    echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
-    echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
-    echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
-    echo '                       Creado por Juanjo García Para Stilu Group                            ' 
-    echo
-    echo "Uso:"
-    echo " robocop [caracteristica]... [método]..."
-    echo " robocop [opción]..."
-    echo
-    echo "Caracteristicas:"
-    echo " --overview        Mostrar descripción general del servidor"
-    echo " --metrics         Mostrar las métricas"
-    echo " --alert           Mostrar el estado de las alarmas"
-    echo " --updates         Mostrar las actualizaciones disponibles del servidor"
-    echo " --eol             Mostrar el estado de fin de vida del sistema operativo"
-    echo " --knownusers      Agrega un Chat ID para aceptar los comandos desde allí"
-    echo " --addserver       Añade servidor nuevo a monitorizar"
-    echo
-    echo
-    echo "Métodos:"
-    echo " --cli             Salida [característica] a la línea de comando"
-    echo " --robocop         Salida [característica] al bot de Telegram"
-    echo "--email            Enviar [característica] a correo electrónico"
-    echo
-    echo "Opciones:"
-    echo " --cron            Efectuar cambios de cron desde la configuración de robocop"
-    echo " --validate        Comprobar la validez de robocop.conf"
-    echo " --install         Instala robocop en el sistema y desbloquea todas las funciones"
-    echo " --upgrade         Actualiza robocop a la última versión estable"
-    echo " --uninstall       Desinstala robocop del sistema"
-    echo " --help            Mostrar esta ayuda y salir"
-    echo " --version         Mostrar información de la versión y salir"
-}
-
-function robocop_cron {
-    # requisitos de función
-    root_requerido
-    robocop_validate
-
-    # devuelve un error cuando el archivo de configuración no está instalado en el sistema
-    if [ "${ROBOCOP_CONFIG}" == 'disabled' ]; then
-        no_disponible
-    fi
-
-    echo '*** ACTUALIZACIÓN DE CRONJOBS ***'
-    # elimina cronjobs para que las tareas automatizadas también se puedan desactivar
-    echo '[-] Eliminando antiguos cronjobs de robocop...'
-    rm -f /etc/cron.d/robocop_*
-    # actualizar tareas automatizadas de cronjobs
-    if [ "${ROBOCOP_UPGRADE}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para la actualización automática de robocop...'
-        echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido\n${ROBOCOP_UPGRADE_CRON} root /usr/bin/robocop --silent-upgrade" > /etc/cron.d/robocop_upgrade
-    fi
-    if [ "${OVERVIEW_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en Telegram...'
-        echo -e "# Este cronjob activa la descripción general automatizada del servidor en Telegram en el horario elegido\n${OVERVIEW_CRON} root /usr/bin/robocop --overview --robocop" > /etc/cron.d/robocop_overview_telegram
-    fi
-    #if [ "${OVERVIEW_EMAIL}" == 'yes' ]; then
-    #    echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en el correo electrónico...'
-    #    echo -e "# Este cronjob activa la descripción general automática del servidor en el correo electrónico en el horario elegido\n${OVERVIEW_CRON} root /usr/bin/robocop --overview --email" > /etc/cron.d/robocop_overview_email
-    #fi
-    if [ "${METRICS_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para métricas de servidor automatizadas en Telegram...'
-        echo -e "# Este cronjob activa las métricas del servidor automatizado en Telegram en el horario elegido\n${METRICS_CRON} root /usr/bin/robocop --metrics --robocop" > /etc/cron.d/robocop_metrics_telegram
-    fi
-    #if [ "${METRICS_EMAIL}" == 'yes' ]; then
-    #    echo '[+] Actualización de cronjob para métricas de servidor automatizadas en correo electrónico...'
-    #    echo -e "# Este cronjob activa las métricas del servidor automatizado en el correo electrónico en el horario elegido\n${METRICS_CRON} root /usr/bin/robocop --metrics --email" > /etc/cron.d/robocop_metrics_email
-    #fi
-    if [ "${ALERT_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para alertas de estado del servidor automatizadas en Telegram...'
-        echo -e "# Este cronjob activa alertas de estado del servidor automatizadas en Telegram en el horario elegido\n${ALERT_CRON} root /usr/bin/robocop --alert --robocop" > /etc/cron.d/robocop_alert_telegram
-    fi
-    #if [ "${ALERT_EMAIL}" == 'yes' ]; then
-    #    echo '[+] Actualización de cronjob para alertas de estado del servidor automatizadas en el correo electrónico...'
-    #    echo -e "# Este cronjob activa alertas automáticas de estado del servidor en el correo electrónico en el horario elegido\n${ALERT_CRON} root /usr/bin/robocop --alert --email" > /etc/cron.d/robocop_alert_email   
-    #fi
-    if [ "${UPDATES_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para descripciones de actualizaciones automáticas en Telegram...'
-        echo -e "# Este cronjob activa resúmenes de actualizaciones automáticas en Telegram en el horario elegido\n${UPDATES_CRON} root /usr/bin/robocop --updates --robocop" > /etc/cron.d/robocop_updates_telegram
-    fi
-    #if [ "${UPDATES_EMAIL}" == 'yes' ]; then
-    #    echo '[+] Actualización de cronjob para resúmenes de actualizaciones automáticas en el correo electrónico...'
-    #    echo -e "# Este cronjob activa resúmenes de actualizaciones automáticas en el correo electrónico en el horario elegido\n\n${UPDATES_CRON} root /usr/bin/robocop --updates --email" > /etc/cron.d/robocop_updates_email
-    #fi
-    if [ "${EOL_TELEGRAM}" == 'yes' ]; then
-        echo '[+] Actualización de cronjob para advertencias EOL automatizadas en Telegram...'
-        echo -e "# Este cronjob activa advertencias EOL automatizadas en Telegram en el horario elegido\n${CLI_CRON} root /usr/bin/robocop --eol --robocop" > /etc/cron.d/robocop_eol_telegram
-    fi
-    #if [ "${EOL_EMAIL}" == 'yes' ]; then
-    #    echo '[+] Actualización de cronjob para advertencias EOL automatizadas en el correo electrónico...'
-    #    echo -e "# Este cronjob activa advertencias EOL automáticas en el correo electrónico en el horario elegido\n${CLI_CRON} root /usr/bin/robocop --eol --email" > /etc/cron.d/robocop_eol_email
-    #fi
-
-    # proporcionar comentarios al usuario cuando todas las tareas automatizadas estén deshabilitadas
-    if [ "${ROBOCOP_UPGRADE}" != 'yes' ] && \
-    [ "${OVERVIEW_TELEGRAM}" != 'yes' ] && \
-    [ "${METRICS_TELEGRAM}" != 'yes' ] && \
-    [ "${ALERT_TELEGRAM}" != 'yes' ] && \
-    [ "${UPDATES_TELEGRAM}" != 'yes' ] && \
-    [ "${EOL_TELEGRAM}" != 'yes' ]; then
-        echo '[i] Todas las tareas automatizadas están deshabilitadas, no hay cronjobs para actualizar...'
-        exit 0
-    fi
-
-    # reinicie cron para efectuar realmente los nuevos cronjobs
-    echo '[+] Reiniciando el servicio cron...'
-    if [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-        systemctl restart crond.service
-    elif [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "yum" ]; then
-        systemctl restart crond.service
-    elif [ "${SERVICE_MANAGER}" == "systemctl" ] && [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        systemctl restart cron.service
-    elif [ "${SERVICE_MANAGER}" == "service" ] && [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        service cron restart
-    #elif [ "${SERVICE_MANAGER}" == "rc-service" ] && [ "${PACKAGE_MANAGER}" == "apk" ]; then
-    #    rc-service cron start # No estoy seguro si esto es correcto
-    fi
-    echo '[i] HECHO!'
-    exit 0
-}
-
-function robocop_validate {
-    # requisitos de función
-    root_requerido
-
-    # devuelve un error cuando el archivo de configuración no está instalado en el sistema
-    if [ "${ROBOCOP_CONFIG}" == 'disabled' ]; then
-        no_disponible
-    fi
-
-    echo '*** VALIDANDO ROBOCOP.CONF ***'
-    # crear un archivo temporal para robocop.conf
-    echo '[+] Creando un archivo temporal desde /etc/robocop/robocop.conf...'
-    TMP_VALIDATE="$(mktemp)"
-    # elimina todo el contenido que comienza con '#', elimina todos los espacios en blanco y lo agrega al archivo temporal
-    cat /etc/robocop/robocop.conf | cut -f1 -d"#" | sed '/^[[:space:]]*$/d' | tr -d '%' > "${TMP_VALIDATE}"
-    # Source del archivo temporal para que las variables puedan ser validadas
-    source "${TMP_VALIDATE}"
-
-    # validar el archivo de configuración (sin cron ni parámetros de configuración específicos del método)
-    echo "[i] Nota: los parámetros de configuración de métodos y cron no se validarán..."
-    echo '[i] Validando robocop.conf temporal...'
-    VALIDATION_ERROR='0'
-    if [ ! "${MAJOR_VERSION}" > '0' ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable MAJOR_VERSION debe ser un número."
-    fi
-    if { [ "${ROBOCOP_UPGRADE}" != 'yes' ] && [ "${ROBOCOP_UPGRADE}" != 'no' ]; } && [ ! -z "${ROBOCOP_UPGRADE}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable ROBOCOP_UPGRADE debe ser 'yes' o 'no'."
-    fi
-    if { [ "${ROBOCOP_UPGRADE_TELEGRAM}" != 'yes' ] && [ "${ROBOCOP_UPGRADE_TELEGRAM}" != 'no' ]; } && [ ! -z "${ROBOCOP_UPGRADE_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable ROBOCOP_UPGRADE_TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if { [ "${OVERVIEW_TELEGRAM}" != 'yes' ] && [ "${OVERVIEW_TELEGRAM}" != 'no' ]; } && [ ! -z "${OVERVIEW_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable OVERVIEW_TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if { [ "${METRICS_TELEGRAM}" != 'yes' ] && [ "${METRICS_TELEGRAM}" != 'no' ]; } && [ ! -z "${METRICS_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable METRICS_TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if { [ "${ALERT_TELEGRAM}" != 'yes' ] && [ "${ALERT_TELEGRAM}" != 'no' ]; } && [ ! -z "${ALERT_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable ALERT_TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if { [ "${UPDATES_TELEGRAM}" != 'yes' ] && [ "${UPDATES_TELEGRAM}" != 'no' ]; } && [ ! -z "${UPDATES_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable UPDATES_TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if { [ "${EOL_TELEGRAM}" != 'yes' ] && [ "${EOL_TELEGRAM}" != 'no' ]; } && [ ! -z "${EOL_TELEGRAM}" ]; then
-        VALIDATION_ERROR='1'
-        echo "[!] error de validación: la variable EOL TELEGRAM debe ser 'yes' o 'no'."
-    fi
-    if [[ "$(echo ${THRESHOLD_CPU} | tr -d '%')" -lt '0' ]] || [[ "$(echo ${THRESHOLD_CPU} | tr -d '%')" -gt '100' ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_CPU debe estar entre '0%' y '100%'."
-    fi
-    if [[ ! "$(echo ${THRESHOLD_CPU} | tr -d '%')" =~ ^[[:digit:]] ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_CPU solo debe contener números y '%'."
-    fi
-    if [[ "$(echo ${THRESHOLD_MEMORY} | tr -d '%')" -lt '0' ]] || [[ "$(echo ${THRESHOLD_MEMORY} | tr -d '%')" -gt '100' ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_MEMORY debe estar entre '0%' y '100%'."
-    fi
-    if [[ ! "$(echo ${THRESHOLD_MEMORY} | tr -d '%')" =~ ^[[:digit:]] ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_MEMORY solo debe contener números y '%'."
-    fi
-    if [[ "$(echo ${THRESHOLD_DISK} | tr -d '%')" -lt '0' ]] || [[ "$(echo ${THRESHOLD_DISK} | tr -d '%')" -gt '100' ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_DISK debe estar entre '0%' y '100%'."
-    fi
-    if [[ ! "$(echo ${THRESHOLD_DISK} | tr -d '%')" =~ ^[[:digit:]] ]]; then
-        VALIDATION_ERROR='1'
-        echo "[!] Error de validación: la variable THRESHOLD_DISK solo debe contener números y '%'."
-    fi
-
-    # eliminar archivo temporal
-    echo "[-] Eliminando archivo temporal..."
-    rm -f "${TMP_VALIDATE}"
-
-    # dar feedback al usuario si la validación fue exitosa o no
-    if [ "${VALIDATION_ERROR}" == '1' ]; then
-        echo "[!] Se han encontrado errores de validación. Corrígelos antes de volver a intentarlo...."
+function sin_argumentos {
+        echo "robocop: ¿Por qué no quieres que haga nada? Añade algún argumento, puedo ser útil :)"
+        echo "Usa 'robocop --help' para ver un listado de argumentos. Te ayudará a elegir la opción correcta"
         exit 1
-    else
-        echo "[i] No se han encontrado errores de validación..."
-    fi
-}
-
-function robocop_install_check {
-    # comprobar si robocop.conf ya está instalado
-    if [ -f /etc/robocop/robocop.conf ]; then
-        # si es cierto, pregunte al usuario si se pretende una reinstalación
-        while true
-            do
-                read -r -p '[?] ROBOCOP ya está instalado, ¿te gustaría reinstalarlo? (yes/no): ' REINSTALL
-                [ "${REINSTALL}" = "yes" ] || [ "${REINSTALL}" = "no" ] && break
-                error_si_o_no
-            done
-
-        # salir si no es intencionado
-        if [ "${REINSTALL}" = "no" ]; then
-            exit 0
-        fi
-
-        # reinstalando ROBOCOP
-        if [ "${REINSTALL}" = "yes" ]; then
-            echo "[!] ROBOCOP será reinstalado ahora..."
-            robocop_install
-        fi
-    else
-        # si robocop no está instalado actualmente, instálelo de inmediato
-        robocop_install
-    fi
-}
-
-function robocop_install {
-    # requisitos de función
-    root_requerido
-    reunir_info_distro
-
-    echo 
-    echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
-    echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
-    echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
-    echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
-    echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
-    echo '                       Creado por Juanjo García Para Stilu Group                            ' 
-    echo
-    echo
-    echo "[!] El barrio va a estar seguro, ROBOCOP ha llegado y se está instalando..."
-
-    # Actualizar SO
-    echo "[+] Instalando dependencias..."
-    update_os
-
-    # instalar dependencias para diferentes administradores de paquetes
-    if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-        dnf install wget bc --assumeyes --quiet
-    elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
-        yum install wget bc --assumeyes --quiet
-    elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        apt-get install aptitude bc curl --assume-yes --quiet
-    elif [ "${PACKAGE_MANAGER}" == "pkg" ]; then
-        pkg install bc wget
-    fi
-
-    # configuración opcional para el método de Telegram
-    while true
-        do
-            read -r -p '[?] ¿Configuramos el método de Telegram? (yes/no): ' TELEGRAM_CONFIGURE
-            [ "${TELEGRAM_CONFIGURE}" = "yes" ] || [ "${TELEGRAM_CONFIGURE}" = "no" ] && break
-            error_si_o_no
-        done
-
-    if [ "${TELEGRAM_CONFIGURE}" == 'yes' ]; then
-        read -r -p '[?] Añade el TOKEN del bot: ' TELEGRAM_TOKEN
-        read -r -p '[?] Añade un CHAT ID (Después podrás añadir el resto):   ' TELEGRAM_CHAT_ID
-    fi
-
-    # añadir la carpeta robocop a /etc y agregar permisos
-    echo "[+] agregando carpetas al sistema..."
-    mkdir -m 755 /etc/robocop
-    # instalar la última versión de robocop y agregar permisos
-    echo "[+] instalando la última versión de ROBOCOP..."
-    wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O /usr/bin/robocop
-    chmod 755 /usr/bin/robocop
-    # añadir el archivo de configuración de robocop a /etc/robocop y agregar permisos
-    echo "[+] Agregando archivo de configuración al sistema..."
-    wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.conf -O /etc/robocop/robocop.conf
-    chmod 644 /etc/robocop/robocop.conf
-
-    # usa la versión principal actual en /etc/robocop/robocop.conf
-    echo "[+] agregando parámetros de configuración predeterminados al archivo de configuración..."
-    sed -i s%'major_version_here'%"$(echo "${ROBOCOP_VERSION}" | cut -c1)"%g /etc/robocop/robocop.conf
-    sed -i s%'branch_here'%"$(echo "${ROBOCOP_BRANCH}")"%g /etc/robocop/robocop.conf
-
-    # agregando token de acceso de telegrama y el Chat ID
-    if [ "${TELEGRAM_CONFIGURE}" == 'yes' ]; then
-        echo "[+] Agregando TOKEN de acceso a Telegram y el Chat ID..."
-        sed -i s%'poner_token'%"${TELEGRAM_TOKEN}"%g /etc/robocop/robocop.conf
-        sed -i s%'telegram_id_here'%"${TELEGRAM_CHAT_ID}"%g /etc/robocop/robocop.conf
-    fi
-
-    # crear o actualizar cronjobs
-    echo "[+] Creando cronjobs..."
-    /bin/bash /usr/bin/robocop --cron
-}
-
-function compare_version {
-    # información de la versión fuente de github y eliminar puntos
-    source <(curl --silent https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/resources/version.txt)
-    ROBOCOP_VERSION_CURRENT_NUMBER="$(echo "${ROBOCOP_VERSION}" | tr -d '.')"
-    ROBOCOP_VERSION_RELEASE_NUMBER="$(echo "${VERSION_robocop}" | tr -d '.')"
-
-    # comprobar si la versión de lanzamiento tiene un número de versión superior
-    if [ "${ROBOCOP_VERSION_RELEASE_NUMBER}" -gt "${ROBOCOP_VERSION_CURRENT_NUMBER}" ]; then
-        NEW_VERSION_AVAILABLE='1'
-    fi
-}
-
-function robocop_upgrade {
-    # requerimientos de la función
-    root_requerido
-    compare_version
-
-    # instalar una nueva versión si está disponible
-    if [ "${NEW_VERSION_AVAILABLE}" == '1' ]; then
-        echo "[i] Nueva versión de robocop disponible, instalando ahora..."
-        echo "[i] Crear archivo temporal para autoactualización..."
-        TMP_INSTALL="$(mktemp)"
-        echo "[i] Descarga la versión más reciente de robocop..."
-        wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O "${TMP_INSTALL}"
-        echo "[i] Establecer permisos en el script de instalación..."
-        chmod 700 "${TMP_INSTALL}"
-        echo "[i] Ejecutando script de instalación..."
-        /bin/bash "${TMP_INSTALL}" --self-upgrade
-    else
-        echo "[i] No hay nueva versión de robocop disponible."
-        exit 0
-    fi
-}
-
-function robocop_silent_upgrade {
-    # requerimientos de la función
-    root_requerido
-    compare_version
-
-    if [ "${NEW_VERSION_AVAILABLE}" == '1' ]; then
-        # crear un archivo temporal para la actualización automática
-        TMP_INSTALL="$(mktemp)"
-        # descargar la versión más reciente de robocop
-        wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O "${TMP_INSTALL}"
-        # establecer permisos en el script de instalación
-        chmod 700 "${TMP_INSTALL}"
-        # ejecutando el script de instalación
-        /bin/bash "${TMP_INSTALL}" --self-upgrade
-    else
-        # salir cuando no hay actualizaciones disponibles
-        exit 0
-    fi
-}
-
-function robocop_self_upgrade {
-    # requerimientos de la función
-    root_requerido
-
-    # descargar la versión más reciente y agregar permisos
-    wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O /usr/bin/robocop
-    chmod 755 /usr/bin/robocop
-    echo "[i] robocop actualizado a la versión ${ROBOCOP_VERSION}..."
-
-    # avisar por telegram
-    if [ "${ROBOCOP_UPGRADE_TELEGRAM}" == 'yes' ]; then
-        # crear mensaje para Telegram
-        TELEGRAM_MESSAGE="$(echo -e "<b>Actualización</b>: <code>${HOSTNAME}</code>\\nROBOCOP, el policía más seguro del barrio ha sido actualizado a la versión ${ROBOCOP_VERSION}.")"
-
-        # llamada a METHOD_ROBOCOP
-        METHOD_ROBOCOP
-    fi
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function robocop_uninstall {
-    # requerimientos de la función
-    root_requerido
-
-    # preguntar si se pretendía desinstalar
-    while true
-        do
-            read -r -p '[?] ¿Estás seguro que quieres eliminar al mejor policía de todos los tiempos? (yes/no): ' UNINSTALL
-            [ "${UNINSTALL}" = "yes" ] || [ "${UNINSTALL}" = "no" ] && break
-            error_si_o_no
-       done
-
-        # salir si no se pretendía
-        if [ "${UNINSTALL}" = "no" ]; then
-            exit 0
-        fi
-
-        # uninstall when intended
-        if [ "${UNINSTALL}" = "yes" ]; then
-            echo "[i] ROBOCOP se jubilará ahora..."
-            echo "[-] Eliminando a ROBOCOP de cronjob..."
-            rm -f /etc/cron.d/robocop_*
-            echo "[-] Eliminando robocop.conf del sistema..."
-            rm -rf /etc/robocop
-            echo "[-] Eliminando ROBOCOP del sistema..."
-            rm -f /usr/bin/robocop
-            echo "[i] Espero que ROBOCOP haya servidor con honores, ya se ha retirado a descansar a su pisito en Menorca..."
-            exit 0
-        fi
-}
-
-#############################################################################
-#                           FUNCIONES GENERALES                             #
-#############################################################################
-
-function update_os {
-    # requerimientos de la función
-    root_requerido
-
-    # actualizar las distribuciones modernas basadas en rhel
-    if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-        dnf update --assumeyes --quiet
-    # actualizar distribuciones antiguas basadas en rhel
-    elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
-        yum update --assumeyes --quiet
-    # actualizar las distribuciones basadas en debian
-    elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        apt-get update --quiet && apt-get upgrade --assume-yes --quiet
-    fi
 }
 
 #############################################################################
 #                       FUNCIONES DE RECOLECCIÓN                            #
 #############################################################################
-
 function reunir_info_distro {
     # obtener información del sistema operativo de os-release
-    source <(cat /etc/os-release | tr -d '.')
+    source <(ssh ${USER}@${SERVER} cat /etc/os-release | tr -d '.')
 
     # poner nombre de distribución, id y versión en variables
     DISTRO="${NAME}"
@@ -802,64 +859,31 @@ function reunir_info_distro {
 
 function reunir_info_servidor {
     # información del servidor
-    HOSTNAME="$(uname -n)"
-    OPERATING_SYSTEM="$(uname -o)"
-    KERNEL_NAME="$(uname -s)"
-    KERNEL_VERSION="$(uname -r)"
-    ARCHITECTURE="$(uname -m)"
-    UPTIME="$(uptime -p)"
+    HOSTNAME="$(ssh ${USER}@${SERVER} "uname -n")"
+    OPERATING_SYSTEM="$(ssh ${USER}@${SERVER} "uname -o")"
+    KERNEL_NAME="$(ssh ${USER}@${SERVER} "uname -s")"
+    KERNEL_VERSION="$(ssh ${USER}@${SERVER} "uname -r")"
+    ARCHITECTURE="$(ssh ${USER}@${SERVER} "uname -m")"
+    UPTIME="$(ssh ${USER}@${SERVER} "uptime -p")"
 }
 
 function reunir_info_red {
     # información de la IP interna
-    INTERNAL_IP_ADDRESS="$(hostname -I)"
+    INTERNAL_IP_ADDRESS="$(ssh ${USER}@${SERVER} "hostname -I")"
 
     # información de la IP externa
-    EXTERNAL_IP_ADDRESS="$(curl --silent ipecho.net/plain)"
+    EXTERNAL_IP_ADDRESS="$(ssh ${USER}@${SERVER} "curl --silent ipecho.net/plain")"
 }
 
 function reunir_metricas_cpu {
-    # requerimientos de la función
-    root_requerido
 
-    # métricas de CPU
-    CORE_AMOUNT="$(grep -c 'cpu cores' /proc/cpuinfo)"
-    MAX_LOAD_SERVER="${CORE_AMOUNT}.00"
-    COMPLETE_LOAD="$(< /proc/loadavg awk '{print $1" "$2" "$3}')"
-    CURRENT_LOAD="$(< /proc/loadavg awk '{print $3}')"
-    CURRENT_LOAD_PERCENTAGE="$(echo "(${CURRENT_LOAD}/${MAX_LOAD_SERVER})*100" | bc -l)"
-    CURRENT_LOAD_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_LOAD_PERCENTAGE}" | tr -d '%'))"
-}
-
-function reunir_metricas_memoria {
-    # métricas de memoria con la herramienta free
-    FREE_VERSION="$(free --version | awk '{ print $NF }' | tr -d '.')"
-
-    # usa el formato antiguo cuando se use la versión antigua de free
-    if [ "${FREE_VERSION}" -le "339" ]; then
-        TOTAL_MEMORY="$(free -m | awk '/^Mem/ {print $2}')"
-        FREE_MEMORY="$(free -m | awk '/^Mem/ {print $4}')"
-        BUFFERS_MEMORY="$(free -m | awk '/^Mem/ {print $6}')"
-        CACHED_MEMORY="$(free -m | awk '/^Mem/ {print $7}')"
-        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_MEMORY}-${CACHED_MEMORY})" | bc -l)"
-        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
-        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
-    # usa un formato más nuevo cuando se use una versión más nueva de gratis
-    elif [ "${FREE_VERSION}" -gt "339" ]; then
-        TOTAL_MEMORY="$(free -m | awk '/^Mem/ {print $2}')"
-        FREE_MEMORY="$(free -m | awk '/^Mem/ {print $4}')"
-        BUFFERS_CACHED_MEMORY="$(free -m | awk '/^Mem/ {print $6}')"
-        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_CACHED_MEMORY})" | bc -l)"
-        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
-        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
-    fi
-}
-
-function reunir_metricas_disco {
-    # métricas de FS
-    TOTAL_DISK_SIZE="$(df -h / --output=size -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
-    CURRENT_DISK_USAGE="$(df -h / --output=used -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
-    CURRENT_DISK_PERCENTAGE="$(df / --output=pcent -x tmpfs -x devtmpfs | tr -dc '0-9')"
+        # métricas de CPU
+        CORE_AMOUNT="$(ssh ${USER}@${SERVER} "grep -c 'cpu cores' /proc/cpuinfo")"
+        MAX_LOAD_SERVER="${CORE_AMOUNT}.00"
+        COMPLETE_LOAD="$(< /proc/loadavg awk '{print $1" "$2" "$3}')"
+        CURRENT_LOAD="$(< /proc/loadavg awk '{print $3}')"
+        CURRENT_LOAD_PERCENTAGE="$(echo "(${CURRENT_LOAD}/${MAX_LOAD_SERVER})*100" | bc -l)"
+        CURRENT_LOAD_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_LOAD_PERCENTAGE}" | tr -d '%'))"
 }
 
 function reunir_metricas_threshold {
@@ -869,55 +893,137 @@ function reunir_metricas_threshold {
     THRESHOLD_DISK_NUMBER="$(echo "${THRESHOLD_DISK}" | tr -d '%')"
 }
 
-function reunir_updates {
-    # requerimientos de la función
-    root_requerido
-
-    # recopilar actualizaciones sobre distribuciones modernas basadas en rhel
-    if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-        # lista con actualizaciones disponibles para la variable UPDATES_DISPONIBLES
-        UPDATES_DISPONIBLES="$(dnf check-update | grep -v plugins | awk '(NR >=1) {print $1;}' | grep '^[[:alpha:]]' | sed 's/\<Last\>//g')"
-        # genera la longitud del carácter de UPDATES_DISPONIBLES en LENGTH_UPDATES
-        LENGTH_UPDATES="${#UPDATES_DISPONIBLES}"
-    # recopilar actualizaciones sobre distribuciones antiguas basadas en rhel
-    elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
-        # lista con actualizaciones disponibles para la variable UPDATES_DISPONIBLES
-        UPDATES_DISPONIBLES="$(yum check-update | grep -v plugins | awk '(NR >=1) {print $1;}' | grep '^[[:alpha:]]' | sed 's/\<Loading\>//g')"
-        # genera la longitud del carácter de UPDATES_DISPONIBLES en LENGTH_UPDATES
-        LENGTH_UPDATES="${#UPDATES_DISPONIBLES}"
-    # recopilar actualizaciones sobre distribuciones basadas en debian
-    elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-        # actualizar repositorio
-        apt-get --quiet update
-        # lista con actualizaciones disponibles para la variable UPDATES_DISPONIBLES
-        UPDATES_DISPONIBLES="$(aptitude -F "%p" search '~U')"
-        # genera la longitud del carácter de UPDATES_DISPONIBLES en LENGTH_UPDATES
-        LENGTH_UPDATES="${#UPDATES_DISPONIBLES}"
+function reunir_ping {
+    if ping -q -c 1 -W 1 ${SERVER} >/dev/null; then
+        echo "OK" > ${HOME_DIRECTORY}monit/status_ping.log
+    else
+        echo "KO" > ${HOME_DIRECTORY}monit/status_ping.log
     fi
 }
 
-function reunir_eol {
-    # requerimientos de la función
-    reunir_info_distro
+function reunir_metricas_memoria {
+    # métricas de memoria con la herramienta free
+    FREE_VERSION="$(ssh ${USER}@${SERVER} free --version | awk '{ print $NF }' | tr -d '.')"
 
-    # modificar la información básica de distribución a mayúsculas
-    EOL_OS="$(echo ${DISTRO_ID}${DISTRO_VERSION} | tr '[:lower:]' '[:upper:]')"
-    EOL_OS_NAME="EOL_${EOL_OS}"
+    # usa el formato antiguo cuando se use la versión antigua de free
+    if [ "${FREE_VERSION}" -le "339" ]; then
+        TOTAL_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $2}')"
+        FREE_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $4}')"
+        BUFFERS_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $6}')"
+        CACHED_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $7}')"
+        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_MEMORY}-${CACHED_MEMORY})" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
+    # usa un formato más nuevo cuando se use una versión más nueva de free
+    elif [ "${FREE_VERSION}" -gt "339" ]; then
+        TOTAL_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $2}')"
+        FREE_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $4}')"
+        BUFFERS_CACHED_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $6}')"
+        USED_MEMORY="$(echo "(${TOTAL_MEMORY}-${FREE_MEMORY}-${BUFFERS_CACHED_MEMORY})" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
+        CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
+    fi
+}
 
-    # base de datos de origen con datos de eol
-    source <(curl --silent https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/resources/eol.list | tr -d '.')
+function reunir_metricas_disco {
+    # métricas de FS
+    TOTAL_DISK_SIZE="$(ssh ${USER}@${SERVER} df -h / --output=size -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
+    CURRENT_DISK_USAGE="$(ssh ${USER}@${SERVER} df -h / --output=used -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
+    CURRENT_DISK_PERCENTAGE="$(ssh ${USER}@${SERVER} df / --output=pcent -x tmpfs -x devtmpfs | tr -dc '0-9')"
+    TOTAL_FS_SIZE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $2}' | tail -1)"
+    CURRENT_FS_USAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $3}' | tail -1)"
+    CURRENT_FS_PERCENTAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $5}' | tail -1 | cut -d '%' -f 1)"
+}
 
-    # calcular la diferencia de fecha entre la fecha actual y la fecha final de vida
-    EPOCH_EOL="$(date --date=$(echo "${!EOL_OS_NAME}") +%s)"
-    EPOCH_CURRENT="$(date +%s)"
-    EPOCH_DIFFERENCE="$(( ${EPOCH_EOL} - ${EPOCH_CURRENT} ))"
+function reunir_metricas_serv {
+    # métricas de servicio
+        SERVICE_RUN="$(ssh ${USER}@${SERVER} pgrep ${PROCESS} -c)"
+}
+
+function reunir_metricas_web {
+
+    WEBSITE="$(echo ${WEBSITE} | cut -d "/" -f3)"
+    if ping -q -c 1 -W 1 ${WEBSITE} >/dev/null; then
+        echo "OK" > ${HOME_DIRECTORY}monit/status_web.log
+    else
+        echo "KO" > ${HOME_DIRECTORY}monit/status_web.log
+    fi
+}
+
+function reunir_pending_updates {
+    PENDING="$(ssh ${USER}@${SERVER} sudo ${PACKAGE_MANAGER} check-update  | sed '1,/^$/d' | wc -l)"
+    if [ "${PENDING}" == 0 ]; then
+        echo "OK" > ${HOME_DIRECTORY}monit/status_updates.log
+    else
+        echo "KO" > ${HOME_DIRECTORY}monit/status_updates.log
+    fi
 }
 
 #############################################################################
-#                      FUNCIONES DE CARACTERISTICAS                         #
+#                       INFORMACIÓN POR PANTALLA                            #
 #############################################################################
 
-function desc_caracteristicas_cli {
+function desc_metricas_cpu {
+        # requerimientos de la función
+        reunir_info_servidor
+        reunir_metricas_cpu
+        reunir_metricas_threshold
+
+        # salida por línea de comandos
+        echo "HOST:             ${HOSTNAME}"
+        echo "TIEMPO ACTIVO:    ${UPTIME}"
+        echo "CPU:              ${COMPLETE_LOAD}"
+        if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_CPU_NUMBER}" ]; then
+                echo "ESTADO CPU: OK"
+                echo "OK" > ${HOME_DIRECTORY}monit/status_cpu.log
+        else
+                echo "ESTADO CPU:       KO"
+                echo "ALERTA!! REVISAD CUANTO ANTES"
+                echo "KO" > ${HOME_DIRECTORY}monit/status_cpu.log
+                envio_telegram
+        fi
+
+    # salir cuando esté hecho
+    exit 0
+}
+
+function desc_ping {
+    if ping -q -c 1 -W 1 ${SERVER} >/dev/null; then
+        echo "OK - El servidor ${SERVER} responde con normalidad"
+    else
+        echo "KO - El servidor ${SERVER} está caído. Revisad lo antes posible!!"
+        envio_telegram
+    fi
+
+}
+
+function desc_metricas_mem {
+    reunir_info_servidor
+    reunir_metricas_memoria
+    reunir_metricas_threshold
+
+    # salida por línea de comandos
+
+    echo "HOST:             ${HOSTNAME}"
+    echo "TIEMPO ACTIVO:    ${UPTIME}"
+    echo "MEMORIA:          ${USED_MEMORY}M / ${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)"
+
+   if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_MEMORY_NUMBER}" ]; then
+            echo "ESTADO MEMORIA:       OK"
+            echo "OK" > ${HOME_DIRECTORY}monit/status_mem.log
+    else
+            echo "ESTADO MEMORIA:       KO"
+            echo "ALERTA!! REVISAD CUANTO ANTES"
+            echo "KO" > ${HOME_DIRECTORY}monit/status_mem.log
+            envio_telegram
+    fi
+
+    # salir cuando esté hecho
+    exit 0
+
+}
+
+function desc_caracteristicas_info {
     # requerimientos de la función
     reunir_info_servidor
     reunir_info_red
@@ -949,252 +1055,502 @@ function desc_caracteristicas_cli {
     exit 0
 }
 
-function desc_caracteristicas_telegram {
-    # requerimientos de la función
-    reunir_info_servidor
-    reunir_info_red
+function desc_metricas_disk {
+        # requerimientos de la función
+        reunir_info_servidor
+        reunir_metricas_disco
+        reunir_metricas_threshold
+
+        # salida por línea de comandos
+        echo "HOST:             ${HOSTNAME}"
+        echo "TIEMPO ACTIVO:    ${UPTIME}"
+        echo "DISCO:            ${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)"
+        echo "FS ${FS}:         ${CURRENT_FS_USAGE} / ${TOTAL_FS_SIZE} (${CURRENT_FS_PERCENTAGE}%)"
+        if [ "${CURRENT_FS_PERCENTAGE}" -lt "${THRESHOLD_DISK_NUMBER}" ]; then
+                echo "ESTADO FS ${FS}: OK"
+                echo "OK" > ${HOME_DIRECTORY}monit/status_fs.log
+        else
+                echo "ESTADO FS ${FS}:       KO"
+                echo "ALERTA!! REVISAD CUANTO ANTES"
+                echo "KO" > ${HOME_DIRECTORY}monit/status_fs.log
+                envio_telegram
+        fi
+
+    # salir cuando esté hecho
+    exit 0
+}
+
+function desc_service {
+        reunir_info_servidor
+        reunir_metricas_serv
+        if [ ${SERVICE_RUN} -gt '0' ]; then
+                echo "ESTADO SERVICIO ${SERVICE}:       OK"
+                echo "OK" > ${HOME_DIRECTORY}monit/status_service_${SERVICE}.log
+        else
+                echo "ESTADO SERVICIO ${SERVICE}:       KO"
+                echo "ALERTA!! REVISAD CUANTO ANTES."
+                echo "KO" > ${HOME_DIRECTORY}monit/status_service_${SERVICE}.log
+                envio_telegram
+        fi
+
+}
+
+function desc_web {
+    WEBSITE=$(echo ${WEBSITE} | cut -d "/" -f3)
+    if ping -q -c 1 -W 1 ${WEBSITE} >/dev/null; then
+        echo "OK - La web ${WEBSITE} está funcionando"
+    else
+        echo "KO - La web ${WEBSITE} está caída. Revisad lo antes posible!!"
+        envio_telegram
+    fi
+
+}
+
+function desc_update {
+    so_requerimientos
     reunir_info_distro
-    reunir_metricas_cpu
-    reunir_metricas_memoria
-    reunir_metricas_disco    
-
-    # crear mensaje para Telegram
-    TELEGRAM_MESSAGE="$(echo -e "<b>Host</b>:                  <code>${HOSTNAME}</code>\\n<b>OS</b>:                      <code>${OPERATING_SYSTEM}</code>\\n<b>Distro</b>:               <code>${DISTRO} ${DISTRO_VERSION}</code>\\n<b>Kernel</b>:              <code>${KERNEL_NAME} ${KERNEL_VERSION}</code>\\n<b>Architecture</b>:  <code>${ARCHITECTURE}</code>\\n<b>Uptime</b>:             <code>${UPTIME}</code>\\n\\n<b>Internal IP</b>:\\n<code>${INTERNAL_IP_ADDRESS}</code>\\n\\n<b>External IP</b>:\\n<code>${EXTERNAL_IP_ADDRESS}</code>\\n\\n<b>Load</b>:                  <code>${COMPLETE_LOAD}</code>\\n<b>Memory</b>:           <code>${USED_MEMORY} M / ${TOTAL_MEMORY} M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)</code>\\n<b>Disk</b>:                   <code>${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)</code>")"
-
-    # llamada al METHOD_ROBOCOP
-    METHOD_ROBOCOP
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_metricas_cli {
-    # requerimientos de la función
     reunir_info_servidor
-    reunir_metricas_cpu
-    reunir_metricas_memoria
-    reunir_metricas_disco
-
-    # salida por línea de comandos
-    echo "HOST:             ${HOSTNAME}"
-    echo "TIEMPO ACTIVO:    ${UPTIME}"
-    echo "CPU:              ${COMPLETE_LOAD}"
-    echo "MEMORIA:          ${USED_MEMORY}M / ${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)"
-    echo "DISCO:            ${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)"
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_metricas_telegram {
-    # requerimientos de la función
-    reunir_info_servidor
-    reunir_metricas_cpu
-    reunir_metricas_memoria
-    reunir_metricas_disco
-
-    # crear mensaje para Telegram
-    TELEGRAM_MESSAGE="$(echo -e "<b>Host</b>:        <code>${HOSTNAME}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>CPU</b>:         <code>${COMPLETE_LOAD}</code>\\n<b>Memoria</b>:  <code>${USED_MEMORY} M / ${TOTAL_MEMORY} M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)</code>\\n<b>Disco</b>:          <code>${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)</code>")"
-
-    # llamada al METHOD_ROBOCOP
-    METHOD_ROBOCOP
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_alerta_cli {
-    # requerimiento de la función
-    reunir_info_servidor
-    reunir_metricas_cpu
-    reunir_metricas_memoria
-    reunir_metricas_disco
-    reunir_metricas_threshold
-
-    # comprueba si la carga del servidor actual excede el umbral y avisa si es verdadero. Salida del estado de alerta del servidor al shell.
-    if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -ge "${THRESHOLD_CPU_NUMBER}" ]; then
-        echo -e "[!] CPU DEL SERVIDOR:\\tLa carga actual del servidor es ${CURRENT_LOAD_PERCENTAGE_ROUNDED}% y excede el límite de ${THRESHOLD_CPU}."
+    reunir_pending_updates
+    if [ ${PENDING} == 0 ]; then
+        echo "No tenemos actualizaciones pendientes en el servidor ${SERVER}"
     else
-        echo -e "[i] CPU DEL SERVIDOR:\\tLa carga actual del servidor es ${CURRENT_LOAD_PERCENTAGE_ROUNDED}% y NO excede el límite de ${THRESHOLD_CPU}."
+        echo "Tenemos actualizaciones pendientes en el servidor ${SERVER}. Instálalas cuanto antes."
+        echo "Recuerda que puedes hacerlo desde Telegram con la opción /updates"
+        envio_telegram
     fi
 
-    if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -ge "${THRESHOLD_MEMORY_NUMBER}" ]; then
-        echo -e "[!] MEMORIA DEL SERVIDOR:\\tEl uso de memoria actual es de ${CURRENT_MEMORY_PERCENTAGE_ROUNDED}% y excede el límite de ${THRESHOLD_MEMORY}."
-    else
-        echo -e "[i] MEMORIA DEL SERVIDOR:\\tEl uso de memoria actual es de ${CURRENT_MEMORY_PERCENTAGE_ROUNDED}% y NO excede el límite de ${THRESHOLD_MEMORY}."
-    fi
-
-    if [ "${CURRENT_DISK_PERCENTAGE}" -ge "${THRESHOLD_DISK_NUMBER}" ]; then
-        echo -e "[!] USO DEL DISCO:\\t\\tEl uso actual del disco es de ${CURRENT_DISK_PERCENTAGE}% y excede el límite de ${THRESHOLD_DISK}."
-    else
-        echo -e "[i] USO DEL DISCO:\\t\\tEl uso actual del disco es de ${CURRENT_DISK_PERCENTAGE}% y NO excede el límite de ${THRESHOLD_DISK}."
-    fi
-
-    # salir cuando acabe
-    exit 0
-}
-
-function desc_alerta_telegram {
-    # requerimientos de la función
-    reunir_info_servidor
-    reunir_metricas_cpu
-    reunir_metricas_memoria
-    reunir_metricas_disco
-    reunir_metricas_threshold
-
-    # comprobar si la carga del servidor actual supera el umbral y alertar si es cierto
-    if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -ge "${THRESHOLD_CPU_NUMBER}" ]; then
-        # crear mensaje para Telegram
-        TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>ALERTA: CPU</b>\\n\\nLa CPU del servidor es (<code>${CURRENT_LOAD_PERCENTAGE_ROUNDED}%</code>) en <b>${HOSTNAME}</b> ey excede el límite de <code>${THRESHOLD_CPU}</code>\\n\\n<b>CPU total:</b>\\n<code>${COMPLETE_LOAD}</code>")"
-
-        # llamada al METHOD_ROBOCOP
-        METHOD_ROBOCOP
-    fi
-
-    # comprobar si el uso actual de la memoria del servidor supera el umbral y alertar si es verdadero
-    if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -ge "${THRESHOLD_MEMORY_NUMBER}" ]; then
-        # crear mensaje para Telegram
-        TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>ALERTA: MEMORIA</b>\\n\\nEl uso de memoria es (<code>${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%</code>) en <b>${HOSTNAME}</b> y excede el límite de <code>${THRESHOLD_MEMORY}</code>\\n\\n<b>Uso de memoria:</b>\\n<code>$(free -m -h)</code>")"
-
-        # llamada al METHOD_ROBOCOP
-        METHOD_ROBOCOP
-    fi
-
-    # comprobar si el uso actual del disco supera el umbral y alertar si es verdadero
-    if [ "${CURRENT_DISK_PERCENTAGE}" -ge "${THRESHOLD_DISK_NUMBER}" ]; then
-        # crear mensaje para Telegram
-        TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>ALERTA: FILE SYSTEM</b>\\n\\nEl uso del disco es (<code>${CURRENT_DISK_PERCENTAGE}%</code>) en <b>${HOSTNAME}</b> y excede el límite de <code>${THRESHOLD_DISK}</code>\\n\\n<b>Información de FS:</b>\\n<code>$(df -h)</code>")"
-
-        # llamada al METHOD_ROBOCOP
-        METHOD_ROBOCOP
-    fi
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_updates_cli {
-    # requerimientos de la función
-    reunir_updates
-
-    # Notificar al usuario cuando no hay actualizaciones
-    if [ -z "${UPDATES_DISPONIBLES}" ]; then
-        echo "No hay actualizaciones disponibles."
-    else
-        # notify user when there are updates available
-        echo "Las siguientes actualizaciones están disponibles:"
-        echo
-        echo "${UPDATES_DISPONIBLES}"
-    fi
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_updates_telegram {
-    # requerimientos de la función
-    reunir_info_servidor
-    reunir_updates
-
-    # no hacer nada si no hay actualizaciones
-    if [ -z "${UPDATES_DISPONIBLES}" ]; then
-        exit 0
-    else
-        # si la longitud de la lista de actualización es inferior a 4000 caracteres, se envía la lista de actualización
-        if [ "${LENGTH_UPDATES}" -lt "4000" ]; then
-            TELEGRAM_MESSAGE="$(echo -e "Hay actualizaciones disponibles en <b>${HOSTNAME}</b>:\n\n${UPDATES_DISPONIBLES}")"
-        fi
-
-        # si la longitud de la lista de actualización es superior a 4000 caracteres, no envíe la lista de actualización
-        if [ "${LENGTH_UPDATES}" -gt "4000" ]; then
-            TELEGRAM_MESSAGE="Hay actualizaciones disponibles en <b>${HOSTNAME}</b>. Desafortunadamente, la lista con actualizaciones es demasiado grande para Telegram. ROBOCOP es letal, pero no puede escribir tanto, actualice lo antes posible."
-        fi
-
-        # llamada al METHOD_ROBOCOP
-        METHOD_ROBOCOP
-    fi
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_eol_cli {
-    # requerimientos de la función
-    reunir_eol
-
-    # primero verifica las entradas TBA, luego verifica si la diferencia de fecha es positiva o negativa
-    if [ "${!EOL_OS_NAME}" == 'TBA' ]; then
-        echo '[i] La fecha EOL de este sistema operativo aún no se ha agregado a la base de datos. Vuelva a intentarlo más tarde.'
-    else
-        if [[ "${EPOCH_DIFFERENCE}" -lt '0' ]]; then
-            echo "[!] Este sistema operativo está al final de su vida útil desde ${!EOL_OS_NAME}."
-        elif [[ "${EPOCH_DIFFERENCE}" -gt '0' ]]; then
-            echo "[i] Este sistema operativo es compatible $(( ${EPOCH_DIFFERENCE} / 86400 )) más días (hasta ${!EOL_OS_NAME})."
-        fi
-    fi
-}
-
-function desc_eol_telegram {
-    # requerimientos de la función
-    reunir_info_servidor
-    reunir_eol
-
-    # no hacer nada si la fecha de fin de vida no está en la base de datos
-    if [ "${!EOL_OS_NAME}" == 'TBA' ]; then
-        exit 0
-    else
-        # dar aviso de fin de vida alrededor de 6, 3 y 1 mes antes de fin de ciclo, y con más frecuencia si es menos de 1 mes (depende del parámetro EOL_CRON)
-        if [[ "${EPOCH_DIFFERENCE}" -lt '0' ]]; then
-            TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>EOL AVISO: ${HOSTNAME}</b>\\nEste sistema operativo está al final de su vida útil desde ${!EOL_OS_NAME}.")"
-        elif [[ "${EPOCH_DIFFERENCE}" -ge '14802000' ]] && [[ "${EPOCH_DIFFERENCE}" -lt '15552000' ]]; then
-            TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>EOL AVISO: ${HOSTNAME}</b>\\nEste sistema operativo llegará al final de su vida útil en $(( ${EPOCH_DIFFERENCE} / 86400 )) días (en ${!EOL_OS_NAME}).")"
-        elif [[ "${EPOCH_DIFFERENCE}" -ge '7026000' ]] && [[ "${EPOCH_DIFFERENCE}" -lt '7776000' ]]; then
-            TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>EOL AVISO: ${HOSTNAME}</b>\\nEste sistema operativo llegará al final de su vida útil en $(( ${EPOCH_DIFFERENCE} / 86400 )) días (en ${!EOL_OS_NAME}).")"
-        elif [[ "${EPOCH_DIFFERENCE}" -ge '1' ]] && [[ "${EPOCH_DIFFERENCE}" -lt '5184000' ]]; then
-            TELEGRAM_MESSAGE="$(echo -e "\xE2\x9A\xA0 <b>EOL AVISO: ${HOSTNAME}</b>\\nEste sistema operativo llegará al final de su vida útil en $(( ${EPOCH_DIFFERENCE} / 86400 )) días (en ${!EOL_OS_NAME}).")"
-        fi
-    fi
-
-    # llamada al METHOD_ROBOCOP
-    METHOD_ROBOCOP
-
-    # salir cuando esté hecho
-    exit 0
-}
-
-function desc_outage {
-    # devuelve un error cuando la interrupción de la función no está disponible
-    if [ "${DESC_OUTAGE}" == 'disabled' ]; then
-        no_disponible
-    fi
 }
 
 #############################################################################
-#                           FUNCIONES DEL MÉTODO                            #
+#                       FUNCIONES DE GESTIÓN                                #
+#############################################################################
+function robocop_install_check {
+    # comprobar si robocop.conf ya está instalado
+    if [ -f /etc/robocop/robocop.conf ]; then
+        # si es cierto, pregunte al usuario si se pretende una reinstalación
+        while true
+            do
+                read -r -p '[?] ROBOCOP ya está instalado, ¿te gustaría reinstalarlo? (si/no): ' REINSTALL
+                [ "${REINSTALL}" = "si" ] || [ "${REINSTALL}" = "no" ] && break
+                error_si_o_no
+            done
+
+        # salir si no es intencionado
+        if [ "${REINSTALL}" = "no" ]; then
+            exit 0
+        fi
+
+        # reinstalando ROBOCOP
+        if [ "${REINSTALL}" = "si" ]; then
+            echo "[!] ROBOCOP será reinstalado ahora..."
+            robocop_install
+        fi
+    else
+        # si robocop no está instalado actualmente, instálelo de inmediato
+        robocop_install
+    fi
+}
+
+function robocop_help {
+    echo
+    echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
+    echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
+    echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
+    echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
+    echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
+    echo '                       Creado por Juanjo García Para Stilu Group                            '
+    echo
+    echo "Uso:"
+    echo " robocop [caracteristica]... [método]..."
+    echo " robocop [opción]..."
+    echo " Ejemplo: robocop --metrics --cpu --server SERVER"
+    echo
+    echo "Caracteristicas:"
+    echo " --overview        Mostrar descripción general del servidor"
+    echo " --metrics         Mostrar las métricas"
+    echo " --alert           Mostrar el estado de las alarmas"
+    echo " --updates         Mostrar las actualizaciones disponibles del servidor"
+    echo " --eol             Mostrar el estado de fin de vida del sistema operativo"
+    echo " --knownusers      Agrega un Chat ID para aceptar los comandos desde allí"
+    echo " --addserver       Añade servidor nuevo a monitorizar"
+    echo
+    echo
+    echo "Métodos:"
+    echo " --cli             Salida [característica] a la línea de comando"
+    echo " --robocop         Salida [característica] al bot de Telegram"
+    echo "--email            Enviar [característica] a correo electrónico"
+    echo
+    echo "Opciones:"
+    echo " --cron            Efectuar cambios de cron desde la configuración de robocop"
+    echo " --validate        Comprobar la validez de robocop.conf"
+    echo " --install         Instala robocop en el sistema y desbloquea todas las funciones"
+    echo " --upgrade         Actualiza robocop a la última versión estable"
+    echo " --uninstall       Desinstala robocop del sistema"
+    echo " --help            Mostrar esta ayuda y salir"
+    echo " --version         Mostrar información de la versión y salir"
+}
+
+function ROBOCOP_VERSION {
+    echo
+    echo '     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) )     //   ) ) '
+    echo '    //___/ /     //   / /     //___/ /     //   / /     //           //   / /     //___/ /  '
+    echo '   / ___ (      //   / /     / __  (      //   / /     //           //   / /     / ____ /   '
+    echo '  //   | |     //   / /     //    ) )    //   / /     //           //   / /     //          '
+    echo ' //    | |    ((___/ /     //____/ /    ((___/ /     ((____/ /    ((___/ /     //           '
+    echo
+    echo "robocop ${ROBOCOP_VERSION}"
+    echo "Copyright 2022 Juanjo García. Propiedad de Stilu Group."
+    echo
+    echo "Creado por Juanjo García"
+}
+
+function robocop_uninstall {
+    # preguntar si se pretendía desinstalar
+    while true
+        do
+            read -r -p '[?] ¿Estás seguro que quieres eliminar al mejor policía de todos los tiempos? (si/no): ' UNINSTALL
+            [ "${UNINSTALL}" = "si" ] || [ "${UNINSTALL}" = "no" ] && break
+            error_si_o_no
+       done
+
+        # salir si no se pretendía
+        if [ "${UNINSTALL}" = "no" ]; then
+            exit 0
+        fi
+
+        # uninstall when intended
+        if [ "${UNINSTALL}" = "si" ]; then
+            echo "[i] ROBOCOP se jubilará ahora..."
+            echo "[-] Eliminando a ROBOCOP de cronjob..."
+            rm -f /etc/cron.d/robocop_*
+            echo "[-] Eliminando robocop.conf del sistema..."
+            rm -rf /etc/robocop
+            echo "[-] Eliminando ROBOCOP del sistema..."
+            rm -f /usr/bin/robocop
+            echo "[-] Eliminando los directorios..."
+            rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs
+            echo "[i] Espero que ROBOCOP haya servidor con honores, ya se ha retirado a descansar a su pisito en Menorca..."
+            exit 0
+        fi
+}
+
+function borrar_cron {
+    echo '*** ACTUALIZACIÓN DE CRONJOBS ***'
+    # elimina cronjobs para que las tareas automatizadas también se puedan desactivar
+    echo '[-] Eliminando antiguos cronjobs de robocop...'
+    rm -f /etc/cron.d/robocop_*
+
+}
+
+function robocop_cron {
+
+    echo '*** ACTUALIZACIÓN DE JOBS AUTOMÁTICOS ***'
+
+    # actualizar tareas automatizadas
+    echo "[?] ¿Quieres configurar un servidor, una URL o una RED?"
+    echo "[?] a) Servidor"
+    echo "[?] b) URL"
+    echo "[?] c) Red"
+    read -r -p '[?] Elige una opción: ' OPT
+
+    case $OPT in
+        a)
+         echo "[?] ¿En qué servidor quieres configurar CRON? "
+         read SERVER
+         echo "[?] ¿Quieres que la monitorización se ejecute en un momento concreto? 1 vez al día, cada 2 horas... Por defecto refresca cada 3 segundos (si/no)"
+         read OPT
+         if [ ${OPT} == "si" ]; then
+                echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: 3s)"
+                echo "[i] Por defecto se ejecuta cada 3 segundos"
+                echo "[?] a) Segundos"
+                echo "[?] b) Minutos"
+                echo "[?] c) Horas"
+                echo "[?] d) Días"
+                echo "[?] e) Default"
+                read OPT
+                opt_time
+                monit_job
+         else
+                if [ -d ${HOME_DIRECTORY}monit/time/3s ]; then
+                        echo "El directorio existe...">>${HOME_DIRECTORY}logs/robocop.log
+                        if [ -f ${HOME_DIRECTORY}monit/exe/3s ]; then
+                                echo "El fichero existe...">>${HOME_DIRECTORY}logs/robocop.log
+                        else
+                                monit_job
+                        fi
+                else
+                        mkdir ${HOME_DIRECTORY}monit/time/3s
+                        touch ${HOME_DIRECTORY}monit/time/3s/${SERVER}
+                        chmod 755 -R ${HOME_DIRECTORY}monit/time/3s
+                        monit_job
+                fi
+         fi
+
+         echo "[?] ¿Quieres configurar la monitorización de CPU? (si/no)"
+         read CRON_CPU
+         echo "[?] ¿Quieres configurar el ping? (si/no)"
+         read CRON_PING
+         echo "[?] ¿Quieres configurar la monitorización de Memoria? (si/no)"
+         read CRON_MEMORY
+         echo "[?] ¿Quieres configurar la monitorización de los FS? (si/no)"
+         read CRON_FS
+         echo "[?] ¿Quieres configurar la monitorización de los servicios (si/no)"
+         read CRON_SERV
+         echo "[?] Quieres configurar las actualizaciones pendientes? (si/no)"
+         read CRON_UPDATE
+         ;;
+        b)
+         echo "[?] ¿Quieres que la monitorización se ejecute en un momento concreto? 1 vez al día, cada 2 horas... Por defecto refresca cada 3 segundos (si/no)"
+         read OPT
+         if [ ${OPT} == "si" ]; then
+                echo "[?] ¿Cada cuanto tiempo quieres ejecutarlo? (Default: 3s)"
+                echo "[i] Por defecto se ejecuta cada 3 segundos"
+                echo "[?] a) Segundos"
+                echo "[?] b) Minutos"
+                echo "[?] c) Horas"
+                echo "[?] d) Días"
+                echo "[?] e) Default"
+                read OPT
+                opt_time
+                monit_job
+         else
+                if [ -d ${HOME_DIRECTORY}monit/time/3s ]; then
+                        echo "El directorio existe...">>${HOME_DIRECTORY}logs/robocop.log
+                        if [ -f ${HOME_DIRECTORY}monit/exe/3s ]; then
+                                echo "El fichero existe...">>${HOME_DIRECTORY}logs/robocop.log
+                        else
+                                monit_job
+                        fi
+                else
+                        mkdir ${HOME_DIRECTORY}monit/time/3s
+                        touch ${HOME_DIRECTORY}monit/time/3s/${SERVER}
+                        chmod 755 -R ${HOME_DIRECTORY}monit/time/3s
+                        monit_job
+                fi
+         fi
+
+
+         echo "[?] ¿Quieres configurar la monitorización de las URLs (si/no)"
+         read CRON_URL
+         ;;
+        c)
+         echo "Todavía está en construcción"
+         ;;
+        *)
+         echo "No has elegido una opción correcta"
+         ;;
+esac
+
+    if [ "${ROBOCOP_UPGRADE}" == 'yes' ]; then
+        echo '[+] Actualización de cronjob para la actualización automática de robocop...'
+        echo -e "# Este cronjob activa la actualización automática de robocop en el horario elegido\n${ROBOCOP_UPGRADE_CRON} root /usr/bin/robocop --silent-upgrade" > /etc/cron.d/robocop_upgrade
+    fi
+    if [ "${CRON_CPU}" == 'si' ]; then
+        if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+                grep -i -v "cpu" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+                mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+        fi
+        echo -e "# Este job activa la actualización automática de CPU en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --cpu --server ${SERVER} &> /dev/null" >> ${TIME_FOLDER}/${SERVER}
+        chmod -R 755 ${TIME_FOLDER}
+    fi
+    if [ "${CRON_PING}" == 'si' ]; then
+        if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+                grep -i -v "ping" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+                mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+        fi
+        echo -e "# Este cronjob activa la actualización automática de PING en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --ping --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
+        chmod -R 755 ${TIME_FOLDER}
+    fi
+
+    if [ "${CRON_MEMORY}" == 'si' ]; then
+        if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+                grep -i -v "memor" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+                mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+        fi
+        echo -e "# Este job activa la actualización automática de MEMORIA en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --memory --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
+        chmod -R 755 ${TIME_FOLDER}
+    fi
+
+    if [ "${CRON_FS}" == 'si' ]; then
+        while [ ${CRON_FS} == "si" ]
+        do
+                echo "[?] ¿Qué FS quieres configurar?"
+                read FS
+                echo -e "# Este job activa la actualización automática del FS ${FS} en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --fs ${FS} --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
+                chmod -R 755 ${TIME_FOLDER}
+                read -r -p '[?] ¿Quieres configurar otro FS? (si/no): ' CRON_FS
+        done
+    fi
+    if [ "${CRON_SERV}" == 'si' ]; then
+        while [ ${CRON_SERV} == "si" ]
+        do
+                echo "[i] Para configurar el servicio tendrás que decirme el nombre del proceso y del servicio (ej: Proceso: mysql / Servicio: MariaDB)"
+                echo "[?] ¿Qué PROCESO quieres configurar?"
+                read PROCESS
+                echo "[?] ¿Qué SERVICIO quieres configurar?"
+                read SERVICE
+                echo -e "# Este job activa la actualización automática del servicio ${SERVICE} en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --service ${SERVICE} ${PROCESS} --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
+                chmod -R 755 ${TIME_FOLDER}
+                read -r -p '[?] ¿Quieres configurar otro SERVICIO? (si/no): ' CRON_SERV
+        done
+    fi
+
+        if [ "${CRON_URL}" == 'si' ]; then
+                while [ ${CRON_URL} == "si" ]
+                do
+                        echo "[?] ¿Qué URL quieres configurar?"
+                        read URL
+                        FILE=$(echo ${URL} | cut -d "/" -f3)
+                        echo -e "# Este cronjob activa la actualización automática de la URL en robocop en el horario elegido del sitio web ${URL}\n/usr/bin/robocop --metrics --url ${URL} > /dev/null" > ${TIME_FOLDER}/${FILE}
+                        chmod -R 755 ${TIME_FOLDER}
+                        read -r -p '[?] ¿Quieres configurar otra URL? (si/no): ' CRON_URL
+                done
+        fi
+
+    if [ "${CRON_UPDATE}" == 'si' ]; then
+        if [ -f ${TIME_FOLDER}/${SERVER} ]; then
+                grep -i -v "update" ${TIME_FOLDER}/${SERVER} > ${TIME_FOLDER}/${SERVER}.temp
+                mv ${TIME_FOLDER}/${SERVER}.temp ${TIME_FOLDER}/${SERVER}
+        fi
+        echo -e "# Este job activa la comprobación automática de UPDATES en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --update --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
+        chmod -R 755 ${TIME_FOLDER}
+    fi
+
+    #if [ "${OVERVIEW_EMAIL}" == 'yes' ]; then
+    #    echo '[+] Actualización de cronjob para vistas generales automatizadas del servidor en el correo electrónico...'
+    #    echo -e "# Este cronjob activa la descripción general automática del servidor en el correo electrónico en el horario elegido\n${OVERVIEW_CRON} root /usr/bin/robocop --overview --email" > /etc/cron.d/robocop_overview_email
+    #fi
+    if [ "${METRICS_TELEGRAM}" == 'yes' ]; then
+        echo '[+] Actualización de cronjob para métricas de servidor automatizadas en Telegram...'
+        echo -e "# Este cronjob activa las métricas del servidor automatizado en Telegram en el horario elegido\n${METRICS_CRON} root /usr/bin/robocop --metrics --robocop" > /etc/cron.d/robocop_metrics_telegram
+    fi
+    #if [ "${METRICS_EMAIL}" == 'yes' ]; then
+    #    echo '[+] Actualización de cronjob para métricas de servidor automatizadas en correo electrónico...'
+    #    echo -e "# Este cronjob activa las métricas del servidor automatizado en el correo electrónico en el horario elegido\n${METRICS_CRON} root /usr/bin/robocop --metrics --email" > /etc/cron.d/robocop_metrics_email
+    #fi
+    if [ "${ALERT_TELEGRAM}" == 'yes' ]; then
+        echo '[+] Actualización de cronjob para alertas de estado del servidor automatizadas en Telegram...'
+        echo -e "# Este cronjob activa alertas de estado del servidor automatizadas en Telegram en el horario elegido\n${ALERT_CRON} root /usr/bin/robocop --alert --robocop" > /etc/cron.d/robocop_alert_telegram
+    fi
+    #if [ "${ALERT_EMAIL}" == 'yes' ]; then
+    #    echo '[+] Actualización de cronjob para alertas de estado del servidor automatizadas en el correo electrónico...'
+    #    echo -e "# Este cronjob activa alertas automáticas de estado del servidor en el correo electrónico en el horario elegido\n${ALERT_CRON} root /usr/bin/robocop --alert --email" > /etc/cron.d/robocop_alert_email
+    #fi
+    if [ "${UPDATES_TELEGRAM}" == 'yes' ]; then
+        echo '[+] Actualización de cronjob para descripciones de actualizaciones automáticas en Telegram...'
+        echo -e "# Este cronjob activa resúmenes de actualizaciones automáticas en Telegram en el horario elegido\n${UPDATES_CRON} root /usr/bin/robocop --updates --robocop" > /etc/cron.d/robocop_updates_telegram
+    fi
+    #if [ "${UPDATES_EMAIL}" == 'yes' ]; then
+    #    echo '[+] Actualización de cronjob para resúmenes de actualizaciones automáticas en el correo electrónico...'
+    #    echo -e "# Este cronjob activa resúmenes de actualizaciones automáticas en el correo electrónico en el horario elegido\n\n${UPDATES_CRON} root /usr/bin/robocop --updates --email" > /etc/cron.d/robocop_updates_email
+    #fi
+
+    # proporcionar comentarios al usuario cuando todas las tareas automatizadas estén deshabilitadas
+    if [ "${ROBOCOP_UPGRADE}" != 'yes' ] && \
+    [ "${OVERVIEW_TELEGRAM}" != 'yes' ] && \
+    [ "${METRICS_TELEGRAM}" != 'yes' ] && \
+    [ "${ALERT_TELEGRAM}" != 'yes' ] && \
+    [ "${UPDATES_TELEGRAM}" != 'yes' ] && \
+    [ "${EOL_TELEGRAM}" != 'yes' ]; then
+        echo '[i] Todas las tareas automatizadas están deshabilitadas, no hay cronjobs para actualizar...'
+        exit 0
+    fi
+
+    echo '[i] HECHO!'
+    exit 0
+}
+
+#############################################################################
+#                       FUNCIÓN DE OPCIONES                                 #
 #############################################################################
 
-function METHOD_ROBOCOP {
-    # devolver un error cuando Telegram no está disponible
-    if [ "${METHOD_ROBOCOP}" == 'disabled' ]; then
-        no_disponible
-    fi
+function opt_time {
+        case $OPT in
 
-    # crear payload para Telegram
-    TELEGRAM_PAYLOAD="chat_id=${TELEGRAM_CHAT}&text=${TELEGRAM_MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+                a)
+                echo "[?] ¿Cada cuántos segundos quieres ejecutarlo?"
+                read TIME
+                mkdir ${HOME_DIRECTORY}monit/time/${TIME}s
+                TIME_FOLDER=${HOME_DIRECTORY}monit/time/${TIME}s
+                MONIT_TIME=${TIME}s
+                ;;
 
-    # enviar payload a la API de Telegram y salir
-    curl --silent --max-time 10 --retry 5 --retry-delay 2 --retry-max-time 10 -d "${TELEGRAM_PAYLOAD}" "${TELEGRAM_URL}" > /dev/null 2>&1 &
+                b)
+                echo "[?] ¿Cada cuántos minutos quieres ejecutarlo?"
+                read TIME
+                mkdir ${HOME_DIRECTORY}monit/time/${TIME}m
+                TIME_FOLDER=${HOME_DIRECTORY}monit/time/${TIME}m
+                MONIT_TIME=${TIME}m
+                ;;
+
+                c)
+                echo "[?] ¿Cada cuántas horas quieres ejecutarlo?"
+                read TIME
+                mkdir ${HOME_DIRECTORY}monit/time/${TIME}h
+                TIME_FOLDER=${HOME_DIRECTORY}monit/time/${TIME}h
+                MONIT_TIME=${TIME}h
+                ;;
+
+                d)
+                echo "[?] ¿Cada cuántos días quieres ejecutarlo?"
+                read TIME
+                mkdir ${HOME_DIRECTORY}monit/time/${TIME}d
+                TIME_FOLDER=${HOME_DIRECTORY}monit/time/${TIME}d
+                MONIT_TIME=${TIME}d
+                ;;
+
+                e)
+                echo "[i] Se ejecutará cada 3s tal como se establece por defecto"
+                ;;
+
+                *)
+                echo "[!] No es un valor correcto, se ejecutará cada 3s"
+                ;;
+        esac
+
 }
 
-function method_email {
-    # devolver un error cuando el correo electrónico no está disponible
-    if [ "${METHOD_EMAIL}" == 'disabled' ]; then
-        no_disponible
+#############################################################################
+#                     REQUERIMIENTOS DE LAS FUNCIONES                       #
+#############################################################################
+function so_requerimientos {
+    # compruebe si el administrador de paquetes compatible está instalado y complete las variables relevantes
+    if [ "$(ssh ${USER}@${SERVER} command -v dnf)" ]; then
+        PACKAGE_MANAGER='dnf'
+    elif [ "$(ssh ${USER}@${SERVER} command -v yum)" ]; then
+        PACKAGE_MANAGER='yum'
+    elif [ "$(ssh ${USER}@${SERVER} command -v apt)" ]; then
+        PACKAGE_MANAGER='apt'
+    elif [ "$(ssh ${USER}@${SERVER} command -v pkg)" ]; then
+        PACKAGE_MANAGER='pkg'
+    else
+        os_no_soportado
     fi
 
-    # planificado para la siguiente versión
-    no_implementado
+    # comprueba si el administrador de servicios compatible está instalado y complete las variables relevantes
+    # systemctl
+    if [ "$(ssh ${USER}@${SERVER} command -v systemctl)" ]; then
+        SERVICE_MANAGER='systemctl'
+    # servicio
+    elif [ "$(ssh ${USER}@${SERVER} command -v service)" ]; then
+        SERVICE_MANAGER='service'
+    # openrc
+    elif [ "$(ssh ${USER}@${SERVER} command -v rc-service)" ]; then
+        SERVICE_MANAGER='openrc'
+    else
+        os_no_soportado
+    fi
 }
+
+function internet_requerido {
+    # check internet connection
+    if ping -q -c 1 -W 1 google.com >/dev/null; then
+        echo '[i] Info: el dispositivo está conectado a internet...'
+    else
+        no_internet
+    fi
+}
+
 
 #############################################################################
 #                           FUNCIÓN PRINCIPAL                               #
@@ -1202,10 +1558,10 @@ function method_email {
 
 function robocop_main {
     # revisa si el SO está soportado
-    so_requerimientos
+    #so_requerimientos
 
     # revisa si los argumentos son válidos
-    argumentos_validos
+    #argumentos_validos
 
     # llamada a funciones relevantes basadas en argumentos
     if [ "${ARGUMENT_VERSION}" == '1' ]; then
@@ -1214,50 +1570,62 @@ function robocop_main {
         robocop_help
     elif [ "${ARGUMENT_CRON}" == '1' ]; then
         robocop_cron
-    elif [ "${ARGUMENT_VALIDATE}" == '1' ]; then
-        robocop_validate
     elif [ "${ARGUMENT_INSTALL}" == '1' ]; then
         robocop_install_check
-    elif [ "${ARGUMENT_UPGRADE}" == '1' ]; then
-        robocop_upgrade
-    elif [ "${ARGUMENT_SILENT_UPGRADE}" == '1' ]; then
-        robocop_silent_upgrade
-    elif [ "${ARGUMENT_SELF_UPGRADE}" == '1' ]; then
-        robocop_self_upgrade
     elif [ "${ARGUMENT_UNINSTALL}" == '1' ]; then
         robocop_uninstall
-    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_caracteristicas_cli
+    elif [ "${ARGUMENT_START}" == '1' ]; then
+        start
+    elif [ "${ARGUMENT_STOP}" == '1' ]; then
+        stop
+    elif [ "${ARGUMENT_PING}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
+        desc_ping
+    elif [ "${ARGUMENT_PING}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_caracteristicas_telegram
-    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
-    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_metricas_cli
-    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
-        desc_metricas_telegram
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_SERVICE}" == '1' ]; then
+        desc_service
+    elif [ "${ARGUMENT_DELETE}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        delete
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
+        desc_metricas_mem
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_MEMORY}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_CPU}" == '1' ]; then
+        desc_metricas_cpu
+    elif [ "${ARGUMENT_CPU}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_alerta_cli
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
-        desc_alerta_telegram
-    elif [ "${ARGUMENT_ALERT}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
-    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_updates_cli
+    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
+        desc_caracteristicas_info
+    elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
+        desc_metricas_disk
+    elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_SERVICE}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_MAINTENANCE}" == '1' ] && [ "${AUTOCRON}" == '1' ] && [ "${ARGUMENT_TIME}" == '1' ]; then
+        maintenance_mode
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         desc_updates_telegram
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
-    elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_CLI}" == '1' ]; then
-        desc_eol_cli
-    elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
-        desc_eol_telegram
-    elif [ "${ARGUMENT_EOL}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
+        desc_web
+    elif [ "${ARGUMENT_UPDATE}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
+        desc_update
+    elif [ "${ARGUMENT_UPDATE}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_NONE}" == '1' ]; then
         opcion_no_valida
+    elif [ "${1}" == '' ]; then
+        sin_argumentos
     fi
 }
 
