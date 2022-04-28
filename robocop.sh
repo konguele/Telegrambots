@@ -20,6 +20,7 @@
 # Versión Robocop
 ROBOCOP_VERSION='1.0'
 
+ME=$(whoami)
 USER_ROBOCOP=$(cut -d':' -f1 /etc/passwd | grep -i robocop)
 SERVER=$(hostname)
 if [ -f /usr/bin/robocop_source ]; then
@@ -577,7 +578,7 @@ function monit_job {
         echo "while true">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
         echo "do">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
         echo "  sleep ${MONIT_TIME}">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
-        echo "  ${HOME_DIRECTORY}monit/time/${MONIT_TIME}/*">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
+        echo "  ${HOME_DIRECTORY}monit/time/${MONIT_TIME}/* 1>/dev/null 2>&1">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
         echo "done">>${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
         chmod 755 ${HOME_DIRECTORY}monit/exe/${MONIT_TIME}
 }
@@ -609,8 +610,8 @@ function maintenance_mode {
         MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>MAINTENANCE:</b>        <code>${STATUS}</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
 
-        curl -s -X POST $URL -d chat_id=$ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
-        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>/home/ansible/robocop/logs/robocop.log
+        curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
         ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
         if [ ${ERROR_ENVIO} -ne 0 ]; then
                 echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
@@ -621,34 +622,34 @@ function maintenance_mode {
 
                 if [ -f ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} ]; then
                         if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}s ]; then
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}s/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}s/
                         else
                                 mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}s
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}s/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}s/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}s/
                         fi
                 fi
                 if [ -f ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} ]; then
                         if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}m ]; then
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}m/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}m/
                         else
                                 mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}m
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}m/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}m/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}m/
                         fi
                 fi
                 if [ -f ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} ]; then
                         if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}h ]; then
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}h/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}h/
                         else
                                 mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}h
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}h/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}h/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}h/
                         fi
                 fi
                 if [ -f ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} ]; then
                         if [ -d ${HOME_DIRECTORY}monit/maintenance/${NUM}d ]; then
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}d/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}d/
                         else
                                 mkdir ${HOME_DIRECTORY}monit/maintenance/${NUM}d
-                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} /home/ansible/robocop/monit/maintenance/${NUM}d/
+                                mv ${HOME_DIRECTORY}monit/time/${NUM}d/${SERVER} ${HOME_DIRECTORY}monit/maintenance/${NUM}d/
                         fi
                 fi
 
@@ -660,34 +661,34 @@ function maintenance_mode {
         while [ $NUM -le 60 ]; do
                 if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} ]; then
                          if [ -d ${HOME_DIRECTORY}monit/time/${NUM}s ]; then
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}s/
                          else
                                  mkdir ${HOME_DIRECTORY}monit/time/${NUM}s
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}s/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}s/
                          fi
                  fi
                  if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} ]; then
                          if [ -d ${HOME_DIRECTORY}monit/time/${NUM}m ]; then
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} /home/ansible/robocop/monit/time/${NUM}m/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}m/
                          else
                                  mkdir ${HOME_DIRECTORY}monit/time/${NUM}m
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} /home/ansible/robocop/monit/time/${NUM}m/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}m/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}m/
                          fi
                  fi
                  if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} ]; then
                          if [ -d ${HOME_DIRECTORY}monit/time/${NUM}h ]; then
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} /home/ansible/robocop/monit/time/${NUM}h/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}h/
                          else
                                  mkdir ${HOME_DIRECTORY}monit/time/${NUM}h
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} /home/ansible/robocop/monit/time/${NUM}s/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}h/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}s/
                          fi
                  fi
                  if [ -f ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} ]; then
                          if [ -d ${HOME_DIRECTORY}monit/time/${NUM}d ]; then
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} /home/ansible/robocop/monit/time/${NUM}d/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}d/
                          else
                                  mkdir ${HOME_DIRECTORY}monit/time/${NUM}d
-                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} /home/ansible/robocop/monit/time/${NUM}d/
+                                 mv ${HOME_DIRECTORY}monit/maintenance/${NUM}d/${SERVER} ${HOME_DIRECTORY}monit/time/${NUM}d/
                          fi
                  fi
 
@@ -699,8 +700,8 @@ function maintenance_mode {
         MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>MAINTENANCE:</b>        <code>${STATUS}</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
 
-        curl -s -X POST $URL -d chat_id=$ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
-        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>/home/ansible/robocop/logs/robocop.log
+        curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$TELEGRAM_MESSAGE">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+        cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
         ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
         if [ ${ERROR_ENVIO} -ne 0 ]; then
                 echo "ERROR: El mensaje no se ha podido enviar, revisa tu Token y tu usuario de Telegram. Cancelamos la instalación"
@@ -1221,12 +1222,18 @@ function robocop_uninstall {
         # uninstall when intended
         if [ "${UNINSTALL}" = "si" ]; then
             echo "[i] ROBOCOP se jubilará ahora..."
-            echo "[-] Eliminando a ROBOCOP de cronjob..."
-            rm -f /etc/cron.d/robocop_*
+            echo "[-] Eliminando la monitorización de ROBOCOP del sistema..."
             echo "[-] Eliminando robocop.conf del sistema..."
-            rm -rf /etc/robocop
             echo "[-] Eliminando ROBOCOP del sistema..."
             rm -f /usr/bin/robocop
+            #Enviamos mensaje de despedida
+            curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$MENSAJE_ADIOS">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
+            cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
+            ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
+            if [ ${ERROR_ENVIO} -ne 0 ]; then
+                echo "ERROR: El mensaje no se ha podido enviar, pero ya nada importa... No estaré más en tus sistemas."
+                exit 0
+            fi
             echo "[-] Eliminando los directorios..."
             rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs
             echo "[i] Espero que ROBOCOP haya servidor con honores, ya se ha retirado a descansar a su pisito en Menorca..."
@@ -1372,8 +1379,9 @@ esac
     fi
 
     if [ "${CRON_FS}" == 'si' ]; then
-        while [ ${CRON_FS} == "si" ]
+        while [ $CRON_FS} == "si" ]
         do
+                CRON_FS2=si
                 echo "[?] ¿Qué FS quieres configurar?"
                 read FS
                 echo -e "# Este job activa la actualización automática del FS ${FS} en robocop en el horario elegido del servidor ${SERVER}\n/usr/bin/robocop --metrics --fs ${FS} --server ${SERVER} > /dev/null" >> ${TIME_FOLDER}/${SERVER}
@@ -1384,6 +1392,7 @@ esac
     if [ "${CRON_SERV}" == 'si' ]; then
         while [ ${CRON_SERV} == "si" ]
         do
+                CRON_SERV2=si
                 echo "[i] Para configurar el servicio tendrás que decirme el nombre del proceso y del servicio (ej: Proceso: mysql / Servicio: MariaDB)"
                 echo "[?] ¿Qué PROCESO quieres configurar?"
                 read PROCESS
@@ -1398,6 +1407,7 @@ esac
         if [ "${CRON_URL}" == 'si' ]; then
                 while [ ${CRON_URL} == "si" ]
                 do
+                        CRON_URL2=si
                         echo "[?] ¿Qué URL quieres configurar?"
                         read URL
                         FILE=$(echo ${URL} | cut -d "/" -f3)
@@ -1444,19 +1454,22 @@ esac
     #    echo '[+] Actualización de cronjob para resúmenes de actualizaciones automáticas en el correo electrónico...'
     #    echo -e "# Este cronjob activa resúmenes de actualizaciones automáticas en el correo electrónico en el horario elegido\n\n${UPDATES_CRON} root /usr/bin/robocop --updates --email" > /etc/cron.d/robocop_updates_email
     #fi
-
+    if [ "${ME}" != "${USER}" ]; then
+        chown -R ${USER}:${USER} ${HOME_DIRECTORY}monit/
+    fi
     # proporcionar comentarios al usuario cuando todas las tareas automatizadas estén deshabilitadas
-    if [ "${ROBOCOP_UPGRADE}" != 'yes' ] && \
-    [ "${OVERVIEW_TELEGRAM}" != 'yes' ] && \
-    [ "${METRICS_TELEGRAM}" != 'yes' ] && \
-    [ "${ALERT_TELEGRAM}" != 'yes' ] && \
-    [ "${UPDATES_TELEGRAM}" != 'yes' ] && \
-    [ "${EOL_TELEGRAM}" != 'yes' ]; then
-        echo '[i] Todas las tareas automatizadas están deshabilitadas, no hay cronjobs para actualizar...'
+    if [ "${CRON_CPU}" != 'si' ] && \
+    [ "${CRON_PING}" != 'si' ] && \
+    [ "${CRON_MEMORY}" != 'si' ] && \
+    [ "${CRON_FS2}" != 'si' ] && \
+    [ "${CRON_SERV2}" != 'si' ] && \
+    [ "${CRON_UPDATE}" != 'si' ] && \
+    [ "${CRON_URL2}" != 'si' ]; then
+        echo '[i] No se han actualizado o creado tareas de monitorización...'
         exit 0
     fi
 
-    echo '[i] HECHO!'
+    echo '[i] Las nuevas tareas han sido creadas correctamente. Para empezar a ejecutarlas, recuerda usar el comando robocop --start'
     exit 0
 }
 
