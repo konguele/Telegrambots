@@ -877,7 +877,7 @@ function reunir_info_red {
 }
 
 function reunir_metricas_cpu {
-
+        reunir_metricas_threshold
         # métricas de CPU
         CORE_AMOUNT="$(ssh ${USER}@${SERVER} "grep -c 'cpu cores' /proc/cpuinfo")"
         MAX_LOAD_SERVER="${CORE_AMOUNT}.00"
@@ -885,6 +885,11 @@ function reunir_metricas_cpu {
         CURRENT_LOAD="$(< /proc/loadavg awk '{print $3}')"
         CURRENT_LOAD_PERCENTAGE="$(echo "(${CURRENT_LOAD}/${MAX_LOAD_SERVER})*100" | bc -l)"
         CURRENT_LOAD_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_LOAD_PERCENTAGE}" | tr -d '%'))"
+        if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_CPU_NUMBER}" ]; then
+                echo "OK" > ${HOME_DIRECTORY}monit/status_cpu.log
+        else
+                echo "KO" > ${HOME_DIRECTORY}monit/status_cpu.log
+        fi
 }
 
 function reunir_metricas_threshold {
