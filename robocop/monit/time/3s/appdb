@@ -1,0 +1,16 @@
+# Este job activa la actualización automática de CPU en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --cpu --server appdb &> /dev/null
+# Este cronjob activa la actualización automática de PING en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --ping --server appdb > /dev/null
+# Este job activa la actualización automática de MEMORIA en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --memory --server appdb > /dev/null
+# Este job activa la actualización automática del FS /dev en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --fs /dev --server appdb > /dev/null
+# Este job activa la actualización automática del FS / en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --fs / --server appdb > /dev/null
+# Este job activa la actualización automática del FS /tmp en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --fs /tmp --server appdb > /dev/null
+# Este job activa la actualización automática del servicio Web en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --service Web httpd --server appdb > /dev/null
+# Este job activa la actualización automática del servicio MariaDB en robocop en el horario elegido del servidor appdb
+/usr/bin/robocop --metrics --service MariaDB mysql --server appdb > /dev/null
