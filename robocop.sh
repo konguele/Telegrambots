@@ -1403,7 +1403,7 @@ esac
     fi
 
     if [ "${CRON_FS}" == 'si' ]; then
-        while [ $CRON_FS} == "si" ]
+        while [ ${CRON_FS} == "si" ]
         do
                 CRON_FS2=si
                 echo "[?] ¿Qué FS quieres configurar?"
