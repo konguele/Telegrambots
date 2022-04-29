@@ -200,9 +200,6 @@ function robocop_install {
         if [ "${HOME_DIRECTORY}" == "poner_directorio" ]; then
                 echo "[?] ¿En qué directorio vas a instalar Robocop?"
                 read HOME_DIRECTORY
-                #cp ${HOME_DIRECTORY}robocop.conf ${HOME_DIRECTORY}conf/robocop.conf
-                #sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
-                #source ${HOME_DIRECTORY}conf/robocop.conf
         fi
 
 
@@ -291,15 +288,9 @@ function robocop_install {
                 sed -i s%'poner_id'%"${CHAT_ID}"%g ${HOME_DIRECTORY}conf/robocop.conf
 
                 # Actualizar SO
+		so_requerimientos
                 echo "[+] Instalando dependencias..."
-                echo "[+] instalando la última versión de ROBOCOP..."
-                #wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/${ROBOCOP_BRANCH}/robocop.sh -O /usr/bin/robocop
-                cp ${HOME_DIRECTORY}robocop.sh /usr/bin/robocop
-                touch /usr/bin/robocop_source
-                echo "source ${HOME_DIRECTORY}conf/robocop.conf" > /usr/bin/robocop_source
-                chmod 755 /usr/bin/robocop /usr/bin/robocop_source
-
-                # instalar dependencias para diferentes administradores de paquetes
+		# instalar dependencias para diferentes administradores de paquetes
                 if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
                         dnf install wget bc --assumeyes --quiet
                 elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
@@ -309,6 +300,12 @@ function robocop_install {
                 elif [ "${PACKAGE_MANAGER}" == "pkg" ]; then
                         pkg install bc wget
                 fi
+                echo "[+] instalando la última versión de ROBOCOP..."
+                wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.sh -O /usr/bin/robocop
+                #cp ${HOME_DIRECTORY}robocop.sh /usr/bin/robocop
+                touch /usr/bin/robocop_source
+                echo "source ${HOME_DIRECTORY}conf/robocop.conf" > /usr/bin/robocop_source
+                chmod 755 /usr/bin/robocop /usr/bin/robocop_source
 
                 # Recargamos el source con los datos buenos
                 source ${HOME_DIRECTORY}conf/robocop.conf
@@ -850,7 +847,11 @@ function sin_argumentos {
 #############################################################################
 function reunir_info_distro {
     # obtener información del sistema operativo de os-release
-    source <(ssh ${USER}@${SERVER} cat /etc/os-release | tr -d '.')
+    if [ ${SERVER} == ${HOSTNAME} ]; then
+	source <(cat /etc/os-release | tr -d '.')
+    else
+    	source <(ssh ${USER}@${SERVER} cat /etc/os-release | tr -d '.')
+    fi
 
     # poner nombre de distribución, id y versión en variables
     DISTRO="${NAME}"
@@ -910,7 +911,7 @@ function reunir_ping {
 function reunir_metricas_memoria {
     # métricas de memoria con la herramienta free
     FREE_VERSION="$(ssh ${USER}@${SERVER} free --version | awk '{ print $NF }' | tr -d '.')"
-
+    reunir_metricas_threshold
     # usa el formato antiguo cuando se use la versión antigua de free
     if [ "${FREE_VERSION}" -le "339" ]; then
         TOTAL_MEMORY="$(ssh ${USER}@${SERVER} free -m | awk '/^Mem/ {print $2}')"
@@ -929,21 +930,39 @@ function reunir_metricas_memoria {
         CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
         CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
     fi
+
+    if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_MEMORY_NUMBER}" ]; then
+            echo "OK" > ${HOME_DIRECTORY}monit/status_mem.log
+    else
+            echo "KO" > ${HOME_DIRECTORY}monit/status_mem.log
+    fi	
 }
 
 function reunir_metricas_disco {
     # métricas de FS
+    reunir_metricas_threshold
     TOTAL_DISK_SIZE="$(ssh ${USER}@${SERVER} df -h / --output=size -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
     CURRENT_DISK_USAGE="$(ssh ${USER}@${SERVER} df -h / --output=used -x tmpfs -x devtmpfs | sed -n '2 p' | tr -d ' ')"
     CURRENT_DISK_PERCENTAGE="$(ssh ${USER}@${SERVER} df / --output=pcent -x tmpfs -x devtmpfs | tr -dc '0-9')"
     TOTAL_FS_SIZE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $2}' | tail -1)"
     CURRENT_FS_USAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $3}' | tail -1)"
     CURRENT_FS_PERCENTAGE="$(ssh ${USER}@${SERVER} df -h ${FS} | awk '{print $5}' | tail -1 | cut -d '%' -f 1)"
+    if [ "${CURRENT_FS_PERCENTAGE}" -lt "${THRESHOLD_DISK_NUMBER}" ]; then
+        echo "OK" > ${HOME_DIRECTORY}monit/status_fs.log
+    else
+        echo "KO" > ${HOME_DIRECTORY}monit/status_fs.log
+    fi
+
 }
 
 function reunir_metricas_serv {
     # métricas de servicio
         SERVICE_RUN="$(ssh ${USER}@${SERVER} pgrep ${PROCESS} -c)"
+	if [ ${SERVICE_RUN} -gt '0' ]; then
+                echo "OK" > ${HOME_DIRECTORY}monit/status_service_${SERVICE}.log
+        else
+                echo "KO" > ${HOME_DIRECTORY}monit/status_service_${SERVICE}.log
+        fi
 }
 
 function reunir_metricas_web {

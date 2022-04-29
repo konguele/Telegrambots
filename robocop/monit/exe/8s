@@ -1,6 +1,0 @@
-#!/bin/bash
-while true
-do
-	sleep 8s
-	/home/ansible/robocop/monit/time/8s/*
-done
