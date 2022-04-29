@@ -106,7 +106,7 @@ while test -n "$1"; do
             shift
             ;;
 
-        --updates|updates)
+        --install_updates|install_updates)
             ARGUMENT_UPDATES='1'
             ARGUMENT_FEATURE='1'
             shift
@@ -153,6 +153,11 @@ while test -n "$1"; do
             SERVER=$2
             shift
             ;;
+	--server_group|server_group)
+	    ARGUMENT_GROUP='1'
+	    SERVER=$2
+	    shift
+	    ;;
         --ping)
             ARGUMENT_PING='1'
             shift
@@ -549,6 +554,20 @@ function desc_metricas_telegram {
 
     fi
 
+    if [ ${ARGUMENT_UPDATES} == '1' ]; then
+        STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}monit/status_updates.log)
+        if [ ${STATUS} == OK ]; then
+                STATUS="El Servidor o grupo de servidores ${SERVER} se ha actualizado correctamente"
+        else
+                STATUS="Las actualizaciones del servidor o grupo de servidores ${SERVER} han fallado. Revisa para volver a ejecutarlas."
+        fi
+
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>UPDATES:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    fi
+
+
 }
 
 function envio_telegram {
@@ -775,6 +794,32 @@ function delete {
         echo "[i] Hemos borrado definitivamente toda la monitorización del servidor ${SERVER}"
 
 }
+
+function updates_installer {
+	echo "[i] Vamos a proceder a instalar las actualizaciones del servidor ${SERVER}"
+	echo "[?] ¿Seguro que quieres instalarlas? (si/no)"
+	read INST
+	if [ ${INST} == 'si' ]; then
+		if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
+			sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/updates.yml	
+			ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1
+		fi
+	else
+		echo "[i] No se va a actualizar ningún servidor. Si tienes dudas, recuerda que siempre puedes utilizar la opción robocop --help"
+		exit 0
+	fi
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/updates.yml
+}
+
+function auto_installer {
+	if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
+        	sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/updates.yml
+                ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 2>&1
+        fi
+	echo "OK" > ${HOME_DIRECTORY}monit/status_updates.log
+        envio_telegram
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/updates.yml
+}
 #############################################################################
 #                       FUNCIONES DE ERROR                                  #
 #############################################################################
@@ -882,8 +927,8 @@ function reunir_metricas_cpu {
         # métricas de CPU
         CORE_AMOUNT="$(ssh ${USER}@${SERVER} "grep -c 'cpu cores' /proc/cpuinfo")"
         MAX_LOAD_SERVER="${CORE_AMOUNT}.00"
-        COMPLETE_LOAD="$(< /proc/loadavg awk '{print $1" "$2" "$3}')"
-        CURRENT_LOAD="$(< /proc/loadavg awk '{print $3}')"
+        COMPLETE_LOAD="$(ssh ${USER}@${SERVER} cat /proc/loadavg | awk '{print $1" "$2" "$3}')"
+        CURRENT_LOAD="$(ssh ${USER}@${SERVER} cat /proc/loadavg | awk '{print $3}')"
         CURRENT_LOAD_PERCENTAGE="$(echo "(${CURRENT_LOAD}/${MAX_LOAD_SERVER})*100" | bc -l)"
         CURRENT_LOAD_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_LOAD_PERCENTAGE}" | tr -d '%'))"
         if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_CPU_NUMBER}" ]; then
@@ -1645,10 +1690,10 @@ function robocop_main {
         envio_telegram
     elif [ "${ARGUMENT_MAINTENANCE}" == '1' ] && [ "${AUTOCRON}" == '1' ] && [ "${ARGUMENT_TIME}" == '1' ]; then
         maintenance_mode
-    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
-        desc_updates_telegram
-    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
-        no_implementado
+    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
+        updates_installer
+    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}"] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
+        auto_installer 
     elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
         envio_telegram
     elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then

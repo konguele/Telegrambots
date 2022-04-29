@@ -1,0 +1,8 @@
+---
+- name : reboot server
+  ansible.builtin.reboot:
+    msg: "Me estoy reiniciando porque se han instalado actualizaciones desde Ansible"
+    reboot_timeout: 3600
+    test_command: uptime
+...
+# handlers file for os_opdates
