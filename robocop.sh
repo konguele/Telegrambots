@@ -213,6 +213,14 @@ function robocop_install {
                 read HOME_DIRECTORY
         fi
 
+	if [ "${USER_ROBOCOP}" == "robocop" ]; then
+                        echo "[i] Buen trabajo, el usuario robocop existe."
+                        echo "[!] No olvides compartir las ssh keys, para un correcto funcionamiento"
+        else
+                        echo "[?] El usuario robocop no existe, ¿con qué usuario deseas trabajar?"
+                        echo "[i] Recuerda que si no existe o no has compartido las ssh keys, no funcionará"
+                        read -r -p '[?] Añade el nombre del usuario: ' USER
+        fi
 
         # Creamos la estructura de carpetas
         if [ -d ${HOME_DIRECTORY} ]; then
@@ -225,17 +233,25 @@ function robocop_install {
                         touch ${HOME_DIRECTORY}logs/robocop.log
                         touch ${HOME_DIRECTORY}logs/robocop_telegram.log
                         chmod  755 ${HOME_DIRECTORY}logs
-                        chown -R ansible:ansible ${HOME_DIRECTORY}logs
+                        chown -R ${USER}: ${HOME_DIRECTORY}logs
                         mkdir ${HOME_DIRECTORY}conf
                         chmod 755 ${HOME_DIRECTORY}conf
                         cp robocop.conf ${HOME_DIRECTORY}conf/robocop.conf
-                        chown -R ansible:ansible ${HOME_DIRECTORY}conf
+                        chown -R ${USER}: ${HOME_DIRECTORY}conf
                         mkdir ${HOME_DIRECTORY}monit
                         mkdir ${HOME_DIRECTORY}monit/exe
                         mkdir ${HOME_DIRECTORY}monit/time
                         mkdir ${HOME_DIRECTORY}monit/maintenance
                         chmod -R 755 ${HOME_DIRECTORY}monit
-                        chown -R ansible:ansible ${HOME_DIRECTORY}monit
+                        chown -R ${USER}: ${HOME_DIRECTORY}monit
+			mkdir ${HOME_DIRECTORY}ansible
+			mkdir ${HOME_DIRECTORY}ansible/os_updates
+			mkdir ${HOME_DIRECTORY}ansible/inventario
+			mkdir ${HOME_DIRECTORY}ansible/os_updates/os_updates
+			mkdir ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks
+			mkdir ${HOME_DIRECTORY}ansible/os_updates/os_updates/handlers
+			chmod -R 755 ${HOME_DIRECTORY}ansible
+                        chown -R ${USER}: ${HOME_DIRECTORY}ansible
 
                 fi
 
@@ -249,18 +265,6 @@ function robocop_install {
 
         fi
 
-
-        if [ "${USER_ROBOCOP}" == "robocop" ]; then
-                        echo "[i] Buen trabajo, el usuario robocop existe."
-                        echo "[!] No olvides compartir las ssh keys, para un correcto funcionamiento"
-        else
-                        echo "[?] El usuario robocop no existe, ¿con qué usuario deseas trabajar?"
-                        echo "[i] Recuerda que si no existe o no has compartido las ssh keys, no funcionará"
-                        read -r -p '[?] Añade el nombre del usuario: ' USER
-                        sed -i s%'robocop'%"${USER}"%g ${HOME_DIRECTORY}conf/robocop.conf
-                        sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
-        fi
-        reunir_info_distro
 
         # Creamos la ubicación del fichero conf si no existe
         if [ -d ${HOME_DIRECTORY} ]; then
@@ -297,19 +301,23 @@ function robocop_install {
                 read -r -p '[?] Añade un CHAT ID (Después podrás añadir el resto):   ' CHAT_ID
                 sed -i s%'poner_token'%"${TOKEN}"%g ${HOME_DIRECTORY}conf/robocop.conf
                 sed -i s%'poner_id'%"${CHAT_ID}"%g ${HOME_DIRECTORY}conf/robocop.conf
+		sed -i s%'robocop'%"${USER}"%g ${HOME_DIRECTORY}conf/robocop.conf
+                sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
 
                 # Actualizar SO
 		so_requerimientos
                 echo "[+] Instalando dependencias..."
 		# instalar dependencias para diferentes administradores de paquetes
                 if [ "${PACKAGE_MANAGER}" == "dnf" ]; then
-                        dnf install wget bc --assumeyes --quiet
+			dnf install -y epel-release
+                        dnf install wget git bc ansible python3 --assumeyes --quiet
                 elif [ "${PACKAGE_MANAGER}" == "yum" ]; then
-                        yum install wget bc --assumeyes --quiet
+                        yum install -y epel-release
+			yum install wget git bc ansible python3 --assumeyes --quiet
                 elif [ "${PACKAGE_MANAGER}" == "apt-get" ]; then
-                        apt-get install aptitude bc curl --assume-yes --quiet
+                        apt-get install aptitude bc curl git python ansible --assume-yes --quiet
                 elif [ "${PACKAGE_MANAGER}" == "pkg" ]; then
-                        pkg install bc wget
+                        pkg install bc wget git ansible python
                 fi
                 echo "[+] instalando la última versión de ROBOCOP..."
                 wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.sh -O /usr/bin/robocop
@@ -317,7 +325,15 @@ function robocop_install {
                 touch /usr/bin/robocop_source
                 echo "source ${HOME_DIRECTORY}conf/robocop.conf" > /usr/bin/robocop_source
                 chmod 755 /usr/bin/robocop /usr/bin/robocop_source
-
+		
+		echo "[i] Instalamos los scripts de automatización"
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/inventario/inv1 -O ${HOME_DIRECTORY}ansible/inventario/inv1
+		wget --quiet https://github.com/konguele/Telegrambots/blob/stable/robocop/ansible/updates.yml -O ${HOME_DIRECTORY}ansible/os_updates/updates.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/main.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/updates_DEB.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_DEB.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/updates_RHEL.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_RHEL.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/handlers/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/handlers/main.yml
+				
                 # Recargamos el source con los datos buenos
                 source ${HOME_DIRECTORY}conf/robocop.conf
 
@@ -536,7 +552,7 @@ function desc_metricas_telegram {
                 if [ ${STATUS} == OK  ]; then
                         STATUS="NO tenemos actualizaciones pendientes para instalar"
                 else
-                        STATUS="SI tenemos actualizaciones pendientes. Se pueden instalar directamente desde Telegram con el comando /updates"
+                        STATUS="SI tenemos actualizaciones pendientes. Se pueden instalar directamente desde Telegram con el comando  /install_updates"
                 fi
 
                 MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo</b>:          <code>${UPTIME}</code>\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
