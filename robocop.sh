@@ -353,6 +353,10 @@ function robocop_install {
                 if [ $CRON == 'si' ]; then
                         /bin/bash /usr/bin/robocop --cron
                 fi
+	# Activamos el job de cron para revisar el bot de Telegram
+   	echo '[+] Actualización de cronjob para revisar que el bot de Telegram esté activo...'
+        echo -e "# Este cronjob comprueba el bot de Telegram en el horario elegido\n${CRON_JOB_TIME} ${USER} ${HOME_DIRECTORY}check_telebot" > /etc/cron.d/check_bot
+
 
         elif [ "${TOKEN}" == '' ]; then
                 echo "Algo ha salido mal, no se han cargado las variables de entorno. Las cargo y volvemos a empezar :)"
@@ -1353,7 +1357,7 @@ function robocop_uninstall {
                 exit 0
             fi
             echo "[-] Eliminando los directorios..."
-            rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs
+            rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs ${HOME_DIRECTORY}ansible
             echo "[i] Espero que ROBOCOP haya servidor con honores, ya se ha retirado a descansar a su pisito en Menorca..."
             exit 0
         fi

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+TELEBOT=$(ps -ef | grep -i main.py | grep -v grep | wc -l)
+
+if [ ${TELEBOT} == 0 ]; then
+	source /home/ansible/git/Telegrambots/robocop/conf/robocop.conf
+	python3 ${HOME_DIRECTORY}main.py &
+fi
