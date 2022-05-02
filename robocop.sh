@@ -57,6 +57,12 @@ while test -n "$1"; do
             shift
             ;;
 
+	--reboot|reboot)
+	    ARGUMENT_REBOOT='1'
+	    ARGUMENT_OPTION='1'
+	    shift
+	    ;;
+
         --cron)
             ARGUMENT_CRON='1'
             ARGUMENT_OPTION='1'
@@ -567,6 +573,16 @@ function desc_metricas_telegram {
 
     fi
 
+    if [ ${ARGUMENT_REBOOT} == '1' ]; then
+	if ping -q -c 1 -W 1 ${SERVER} >/dev/null; then
+		STATUS="El Servidor ${SERVER} se ha reiniciado correctamente"
+	else
+		STATUS="El Servidor ${SERVER} está tardando más de lo esperado en reiniciar. ¿Puedes validar que funcione correctamente?"
+	fi
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>STATUS:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+
+    fi
 
 }
 
@@ -605,19 +621,19 @@ function maintenance_mode {
         TIME=$(echo "${MAINT_TIME}" | sed -e 's/.$//')
         echo "[i] El servidor ${SERVER} estará en mantenimiento durante ${MAINT_TIME}"
         if [ ${MAINT_LETTER} == 's' ]; then
-                INICIO=$(date | cut -d " " -f 4)
-                FIN=$(date -d "+${TIME} seconds" | cut -d " " -f 4)
+                INICIO=$(date | cut -d " " -f 5)
+                FIN=$(date -d "+${TIME} seconds" | cut -d " " -f 5)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'm' ]; then
-                INICIO=$(date | cut -d " " -f 4)
-                FIN=$(date -d "+${TIME} minutes" | cut -d " " -f 4)
+                INICIO=$(date | cut -d " " -f 5)
+                FIN=$(date -d "+${TIME} minutes" | cut -d " " -f 5)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'h' ]; then
-                INICIO=$(date | cut -d " " -f 4)
-                FIN=$(date -d "+${TIME} hours" | cut -d " " -f 4)
+                INICIO=$(date | cut -d " " -f 5)
+                FIN=$(date -d "+${TIME} hours" | cut -d " " -f 5)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'd' ]; then
-                INICIO=$(date | cut -d " " -f 4)
+                INICIO=$(date | cut -d " " -f 5)
                 FIN=$(date -d "+${TIME} days")
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará el día ${FIN}"
         fi
@@ -814,12 +830,29 @@ function updates_installer {
 function auto_installer {
 	if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
         	sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/updates.yml
-                ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 2>&1
+                ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 1>/dev/null 2>&1
         fi
 	echo "OK" > ${HOME_DIRECTORY}monit/status_updates.log
         envio_telegram
 	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/updates.yml
 }
+
+function reboot_server {
+	ssh ${USER}@${SERVER} "sudo reboot" 1>/dev/null 2>&1
+	sleep 10
+	if ping -q -c 1 -W 1 ${SERVER} >/dev/null; then
+		echo "Server ${SERVER} have been rebooted"
+	else
+		echo "El servidor ${SERVER} está tardando en arrancar, revisa que sea correcto."
+	fi
+}
+
+function auto_reboot {
+	ssh ${USER}@${SERVER} "sudo reboot" 1>/dev/null 2>&1
+        sleep 15
+	envio_telegram
+}
+
 #############################################################################
 #                       FUNCIONES DE ERROR                                  #
 #############################################################################
@@ -1690,10 +1723,10 @@ function robocop_main {
         envio_telegram
     elif [ "${ARGUMENT_MAINTENANCE}" == '1' ] && [ "${AUTOCRON}" == '1' ] && [ "${ARGUMENT_TIME}" == '1' ]; then
         maintenance_mode
+    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
+        auto_installer
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
-        updates_installer
-    elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${ARGUMENT_ROBOCOP}"] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
-        auto_installer 
+        updates_installer 
     elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
         envio_telegram
     elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
@@ -1704,6 +1737,10 @@ function robocop_main {
         desc_update
     elif [ "${ARGUMENT_UPDATE}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         envio_telegram
+    elif [ "${ARGUMENT_REBOOT}" == '1' ] && [ "${AUTOCRON}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
+        auto_reboot
+    elif [ "${ARGUMENT_REBOOT}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        reboot_server
     elif [ "${ARGUMENT_NONE}" == '1' ]; then
         opcion_no_valida
     elif [ "${1}" == '' ]; then

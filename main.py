@@ -108,12 +108,12 @@ def command_long_text(m):
     os.system(com)
 
 # Revisa el estado de Updates de un servidor
-@bot.message_handler(commands=['updates'])
+@bot.message_handler(commands=['install_updates'])
 def command_long_text(m):
     cid = m.chat.id
-    com = ("/usr/bin/robocop --robocop --install_updates --server " + m.text[len("/updates"):])
-    bot.send_message(cid, "Empieza la instalación de las últimas actualizaciones del servidor o grupo de servidores " + m.text[len("/updates"):])
-    bot.send_message(cid, "Recibirás un mensaje al finalizar la instalación. Funciono bien, ten paciencia si tardo un poco :)"
+    com = ("/usr/bin/robocop --robocop --install_updates --server " + m.text[len("/install_updates"):])
+    bot.send_message(cid, "Empieza la instalación de las últimas actualizaciones del servidor o grupo de servidores " + m.text[len("/install_updates"):])
+    bot.send_message(cid, "Recibirás un mensaje al finalizar la instalación. Funciono bien, ten paciencia si tardo un poco :)")
     bot.send_chat_action(cid, 'typing')
     time.sleep(3)
     os.system(com)
@@ -123,11 +123,21 @@ def command_long_text(m):
 @bot.message_handler(commands=['reboot'])
 def command_long_text(m):
     cid = m.chat.id
-    bot.send_message(cid, "Reiniciando servidor...")
+    com = ("/usr/bin/robocop --robocop --reboot --server " + m.text[len("/reboot"):])
+    bot.send_message(cid, "Reiniciando servidor " + m.text[len("/reboot"):] + "...")
     bot.send_chat_action(cid, 'typing')
     time.sleep(3)
-    os.system("reboot")
-	
+    os.system(com)
+
+# Pone en modo mantenimiento un servidor
+@bot.message_handler(commands=['maintenance'])
+def command_long_text(m):
+    cid = m.chat.id
+    com = ("/usr/bin/robocop --robocop --maintenance --time 1h --server " + m.text[len("/maintenance"):])
+    bot.send_message(cid, "Reiniciando servidor " + m.text[len("/maintenance"):] + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(3)
+    os.system(com)	
 
 # Ejecuta un comando
 @bot.message_handler(commands=['exec'])

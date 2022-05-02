@@ -1,48 +1,15 @@
-Juanjo [857644731][2022-04-29 08:58:22] : token: 5291565375:AAEV1KVA4LY4NcpZ0HgGLHEim4926KC96XM    
-ID: 857644731
-Juanjo [857644731][2022-04-29 09:00:44] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:04:21] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:05:10] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:05:47] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:06:20] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:07:40] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:13:34] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:14:58] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:16:42] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:18:00] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:20:07] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:21:52] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:26:03] : /cpu ansible
-Juanjo [857644731][2022-04-29 09:26:56] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:30:13] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:32:18] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:33:00] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:33:53] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:34:51] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:38:11] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:39:04] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:40:11] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:41:27] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:42:07] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:53:12] : /cpu appweb
-Juanjo [857644731][2022-04-29 09:54:24] : /cpu appweb
-Juanjo [857644731][2022-04-29 10:01:02] : /cpu appweb
-Juanjo [857644731][2022-04-29 10:07:22] : /cpu appweb
-Juanjo [857644731][2022-04-29 10:44:18] : /cpu appweb
-Juanjo [857644731][2022-04-29 10:45:08] : /cpu appweb
-Juanjo [857644731][2022-04-29 11:42:02] : /cpu appweb
-Juanjo [857644731][2022-04-29 11:43:31] : /cpu appweb
-Juanjo [857644731][2022-04-29 11:45:31] : /cpu appweb
-Juanjo [857644731][2022-04-29 11:48:07] : /cpu appweb
-Juanjo [857644731][2022-04-29 11:48:30] : /cpu ansible
-Juanjo [857644731][2022-04-29 11:48:44] : /cpu appdb
-Juanjo [857644731][2022-04-29 11:52:36] : /ram appweb
-Juanjo [857644731][2022-04-29 11:53:53] : /ram ansible
-Juanjo [857644731][2022-04-29 11:54:05] : /ram appweb
-Juanjo [857644731][2022-04-29 11:57:25] : /updates ansible
-Juanjo [857644731][2022-04-29 11:58:34] : /updates ansible
-Juanjo [857644731][2022-04-29 11:59:00] : /updates appweb
-Juanjo [857644731][2022-04-29 12:10:21] : /updates appweb
-Juanjo [857644731][2022-04-29 12:16:09] : /updates appweb
-Juanjo [857644731][2022-04-29 12:20:06] : /updates ansible
-Juanjo [857644731][2022-04-29 12:21:00] : /updates ansible
+Juanjo [857644731][2022-05-02 08:54:20] : /install_updates appweb
+Juanjo [857644731][2022-05-02 08:56:07] : /install_updates appweb
+Juanjo [857644731][2022-05-02 09:02:18] : /updates ansible
+Juanjo [857644731][2022-05-02 09:02:37] : /cpu appdb
+Juanjo [857644731][2022-05-02 09:03:01] : /ram appweb
+Juanjo [857644731][2022-05-02 09:11:35] : /ram
+Juanjo [857644731][2022-05-02 09:12:06] : /ayuda
+Juanjo [857644731][2022-05-02 09:50:24] : /stop
+Juanjo [857644731][2022-05-02 09:50:46] : /reboot appweb
+Juanjo [857644731][2022-05-02 10:51:47] : /maintenance appweb 10s
+Juanjo [857644731][2022-05-02 11:32:02] : /maintenance appweb 10s
+Juanjo [857644731][2022-05-02 11:33:16] : /maintenance appweb 10s
+Juanjo [857644731][2022-05-02 11:39:00] : /maintenance appweb 10s
+Juanjo [857644731][2022-05-02 11:42:11] : /maintenance appweb
+Juanjo [857644731][2022-05-02 11:42:11] : /maintenance appweb
