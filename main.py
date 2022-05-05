@@ -146,6 +146,16 @@ def command_long_text(m):
     time.sleep(3)
     os.system(com)
 
+# Comprobar estado URL
+@bot.message_handler(commands=['url'])
+def command_long_text(m):
+    cid = m.chat.id
+    com = ("/usr/bin/robocop --robocop --url " + m.text[len("/url"):])
+    bot.send_message(cid, "Revisando el estado de la URL " + m.text[len("/url"):] + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(3)
+    os.system(com)
+
 # Ejecuta un comando
 @bot.message_handler(commands=['exec'])
 def command_long_text(m):

@@ -1,17 +1,17 @@
 [all]
 appdb
-web
+appweb
 ansible
 
 [db]
 appdb
 
 [web_server]
-web
+appweb
 
 [ansible_server]
 ansible
 
 [no_ansible]
 appdb
-web
+appweb

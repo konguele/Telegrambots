@@ -244,8 +244,13 @@ function robocop_install {
                         mkdir ${HOME_DIRECTORY}monit/maintenance
                         chmod -R 755 ${HOME_DIRECTORY}monit
                         chown -R ${USER}: ${HOME_DIRECTORY}monit
+			mkdir ${HOME_DIRECTORY}telebot
+			touch ${HOME_DIRECTORY}telebot/usuarios.txt
+			chmod -R 755 ${HOME_DIRECTORY}telebot
+                        chown -R ${USER}: ${HOME_DIRECTORY}telebot
 			mkdir ${HOME_DIRECTORY}ansible
 			mkdir ${HOME_DIRECTORY}ansible/os_updates
+			mkdir ${HOME_DIRECTORY}ansible/reboot
 			mkdir ${HOME_DIRECTORY}ansible/inventario
 			mkdir ${HOME_DIRECTORY}ansible/os_updates/os_updates
 			mkdir ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks
@@ -328,11 +333,12 @@ function robocop_install {
 		
 		echo "[i] Instalamos los scripts de automatización"
 		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/inventario/inv1 -O ${HOME_DIRECTORY}ansible/inventario/inv1
-		wget --quiet https://github.com/konguele/Telegrambots/blob/stable/robocop/ansible/updates.yml -O ${HOME_DIRECTORY}ansible/os_updates/updates.yml
-		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/main.yml
-		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/updates_DEB.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_DEB.yml
-		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/tasks/updates_RHEL.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_RHEL.yml
-		wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop/ansible/os_updates/handlers/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/handlers/main.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/os_updates/updates.yml -O ${HOME_DIRECTORY}ansible/os_updates/updates.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/os_updates/os_updates/tasks/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/main.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/os_updates/os_updates/tasks/updates_DEB.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_DEB.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/os_updates/os_updates/tasks/updates_RHEL.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/tasks/updates_RHEL.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/os_updates/os_updates/handlers/main.yml -O ${HOME_DIRECTORY}ansible/os_updates/os_updates/handlers/main.yml
+		wget --quiet https://raw.githubusercontent.com/konguele/ansible_roles/master/reboot/reboot.yml -O ${HOME_DIRECTORY}ansible/reboot/reboot.yml
 				
                 # Recargamos el source con los datos buenos
                 source ${HOME_DIRECTORY}conf/robocop.conf
@@ -838,39 +844,56 @@ function updates_installer {
 	read INST
 	if [ ${INST} == 'si' ]; then
 		if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
-			sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/updates.yml	
-			ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1
+			sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/os_updates/updates.yml	
+			ansible-playbook ${HOME_DIRECTORY}ansible/os_updates/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1
 		fi
 	else
 		echo "[i] No se va a actualizar ningún servidor. Si tienes dudas, recuerda que siempre puedes utilizar la opción robocop --help"
 		exit 0
 	fi
-	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/updates.yml
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/os_updates/updates.yml
+	echo "[i] El servidor se ha actualizado correctamente y vuelve a estar funcionando..."
 }
 
 function auto_installer {
 	if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
-        	sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/updates.yml
-                ansible-playbook ${HOME_DIRECTORY}ansible/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 1>/dev/null 2>&1
+        	sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/os_updates/updates.yml
+                ansible-playbook ${HOME_DIRECTORY}ansible/os_updates/updates.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 1>/dev/null 2>&1
         fi
 	echo "OK" > ${HOME_DIRECTORY}monit/status_updates.log
         envio_telegram
-	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/updates.yml
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/os_updates/updates.yml
 }
 
 function reboot_server {
-	ssh ${USER}@${SERVER} "sudo reboot" 1>/dev/null 2>&1
-	sleep 10
+	echo "[i] Vamos a proceder a reiniciar el servidor ${SERVER}"
+        echo "[?] ¿Seguro que quieres reiniciarlo? (si/no)"
+        read REB
+        if [ ${REB} == 'si' ]; then
+                if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
+                        sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/reboot/reboot.yml
+                        ansible-playbook ${HOME_DIRECTORY}ansible/reboot/reboot.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1
+                fi
+        else
+                echo "[i] NO se va a reiniciar el servidor ${SERVER}. Si tienes dudas, recuerda que siempre puedes utilizar la opción robocop --help"
+                exit 0
+        fi
+	
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/reboot/reboot.yml
+
 	if ping -q -c 1 -W 1 ${SERVER} >/dev/null; then
-		echo "Server ${SERVER} have been rebooted"
+		echo "[i] Server ${SERVER} have been rebooted"
 	else
 		echo "El servidor ${SERVER} está tardando en arrancar, revisa que sea correcto."
 	fi
 }
 
 function auto_reboot {
-	ssh ${USER}@${SERVER} "sudo reboot" 1>/dev/null 2>&1
-        sleep 15
+	if [ ${AUTOCRON} == '1' ] || [ ${ARGUMENT_GROUP} == '1' ]; then
+                sed -i s%'poner_hosts'%"${SERVER}"%g ${HOME_DIRECTORY}ansible/reboot/reboot.yml
+                ansible-playbook ${HOME_DIRECTORY}ansible/reboot/reboot.yml -i ${HOME_DIRECTORY}ansible/inventario/inv1 1>/dev/null 2>&1
+        fi
+	sed -i s%"${SERVER}"%"poner_hosts"%g ${HOME_DIRECTORY}ansible/reboot/reboot.yml
 	envio_telegram
 }
 
