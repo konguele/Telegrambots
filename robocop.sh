@@ -455,9 +455,10 @@ function desc_metricas_telegram {
                 reunir_info_distro
                 reunir_metricas_cpu
                 reunir_metricas_memoria
+		reunir_metricas_disco
                 source ${HOME_DIRECTORY}conf/robocop.conf
 
-                MESSAGE="$(echo -e "<b>-SISTEMA-</b>\\n<b>Host:</b>     <code>${HOSTNAME}</code>\\n<b>OS:</b>   <code>${OPERATING_SYSTEM}</code>\\n<b>Distro:</b>       <code>${DISTRO} ${DISTRO_VERSION}</code>\\n<b>Kernel:</b>   <code>${KERNEL_NAME} ${KERNEL_VERSION}</code>\\n<b>Arquitectura:</b>    <code>${ARCHITECTURE}</code>\\n<b>Tiempo Activo:</b>    <code>${UPTIME}</code>\\n\\n<b>-IP-</b>\\n<b>IP INTERNA:</b>     <code>${INTERNAL_IP_ADDRESS}</code>\\n<b>IP EXTERNA:</b>     <code>${EXTERNAL_IP_ADDRESS}</code>\\n\\n<b>-PERFORMANCE DEL SERVIDOR-</b>\\n<b>CPU:</b>     <code>${COMPLETE_LOAD}</code>\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)")"
+                MESSAGE="$(echo -e "<b>-SISTEMA-</b>\\n<b>Host:</b>     <code>${HOSTNAME}</code>\\n<b>OS:</b>   <code>${OPERATING_SYSTEM}</code>\\n<b>Distro:</b>       <code>${DISTRO} ${DISTRO_VERSION}</code>\\n<b>Kernel:</b>   <code>${KERNEL_NAME} ${KERNEL_VERSION}</code>\\n<b>Arquitectura:</b>    <code>${ARCHITECTURE}</code>\\n<b>Tiempo Activo:</b>    <code>${UPTIME}</code>\\n\\n<b>-IP-</b>\\n<b>IP INTERNA:</b>     <code>${INTERNAL_IP_ADDRESS}</code>\\n<b>IP EXTERNA:</b>     <code>${EXTERNAL_IP_ADDRESS}</code>\\n\\n<b>-PERFORMANCE DEL SERVIDOR-</b>\\n<b>CPU:</b>     <code>${COMPLETE_LOAD}</code>\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)\\n<b>Disco:</b>       <code>${CURRENT_DISK_USAGE} / ${TOTAL_DISK_SIZE} (${CURRENT_DISK_PERCENTAGE}%)</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
         fi
      fi
@@ -1733,7 +1734,9 @@ function robocop_main {
         envio_telegram
     elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_EMAIL}" == '1' ]; then
         no_implementado
-    elif [ "${ARGUMENT_OVERVIEW}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        envio_telegram
+    elif [ "${AUTOCRON}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
         desc_caracteristicas_info
     elif [ "${ARGUMENT_FS}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then
         desc_metricas_disk
@@ -1747,8 +1750,6 @@ function robocop_main {
         auto_installer
     elif [ "${ARGUMENT_UPDATES}" == '1' ] && [ "${AUTOCRON}" == '1' ] || [ "${ARGUMENT_GROUP}" == '1' ]; then
         updates_installer 
-    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_INFO}" == '1' ]; then
-        envio_telegram
     elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_ROBOCOP}" == '1' ]; then
         envio_telegram
     elif [ "${ARGUMENT_WEB}" == '1' ] && [ "${ARGUMENT_METRICS}" == '1' ]; then

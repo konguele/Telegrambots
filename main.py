@@ -104,7 +104,6 @@ def command_long_text(m):
     com = ("/usr/bin/robocop --robocop --update --server " + m.text[len("/updates"):])
     bot.send_message(cid, "Recogiendo información de actualizaciones pendientes del servidor " + m.text[len("/updates"):])
     bot.send_chat_action(cid, 'typing')
-    time.sleep(3)
     os.system(com)
 
 # Revisa el estado de Updates de un servidor
@@ -134,10 +133,18 @@ def command_long_text(m):
 def command_long_text(m):
     cid = m.chat.id
     com = ("/usr/bin/robocop --robocop --maintenance --time 1h --server " + m.text[len("/maintenance"):])
-    bot.send_message(cid, "Reiniciando servidor " + m.text[len("/maintenance"):] + "...")
+    bot.send_chat_action(cid, 'typing')
+    os.system(com)	
+
+# Recoger información del servidor
+@bot.message_handler(commands=['info'])
+def command_long_text(m):
+    cid = m.chat.id
+    com = ("/usr/bin/robocop --robocop --info --server " + m.text[len("/info"):])
+    bot.send_message(cid, "Recogiendo la información del servidor " + m.text[len("/info"):] + "...")
     bot.send_chat_action(cid, 'typing')
     time.sleep(3)
-    os.system(com)	
+    os.system(com)
 
 # Ejecuta un comando
 @bot.message_handler(commands=['exec'])
