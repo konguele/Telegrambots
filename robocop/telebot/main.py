@@ -6,14 +6,13 @@ import time
 import os
 import sys
 from datetime import datetime
-from sys import exit
 import subprocess
 
 
-TOKEN = 'poner_token'  # token brindado por BotFather
+TOKEN = '5291565375:AAEV1KVA4LY4NcpZ0HgGLHEim4926KC96XM'  # token brindado por BotFather
 
-LOG_DIR = "poner_log" # directorio para log
-USERS_DIR = "poner_userdir" # directorio para usuarios
+LOG_DIR = "/home/ansible/git/Telegrambots/robocop/logs/bot.log" # directorio para log
+USERS_DIR = "/home/ansible/git/Telegrambots/robocop/usuarios.txt" # directorio para usuarios
 
 knownUsers = []  # registro temporal de usuarios
 
@@ -81,10 +80,6 @@ def command_help(m):
 @bot.message_handler(commands=['cpu'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/cpu"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --cpu --server " + m.text[len("/cpu"):])
     bot.send_message(cid, "Recogiendo información de CPU del servidor " + m.text[len("/cpu"):])
     bot.send_chat_action(cid, 'typing')
@@ -95,10 +90,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['ram'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/ram"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --memory --server " + m.text[len("/ram"):])
     bot.send_message(cid, "Recogiendo información de Memoria del servidor " + m.text[len("/ram"):])
     bot.send_chat_action(cid, 'typing')
@@ -110,10 +101,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['updates'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/updates"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --update --server " + m.text[len("/updates"):])
     bot.send_message(cid, "Recogiendo información de actualizaciones pendientes del servidor " + m.text[len("/updates"):])
     bot.send_chat_action(cid, 'typing')
@@ -123,10 +110,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['install_updates'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/install_updates"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --install_updates --server " + m.text[len("/install_updates"):])
     bot.send_message(cid, "Empieza la instalación de las últimas actualizaciones del servidor o grupo de servidores " + m.text[len("/install_updates"):])
     bot.send_message(cid, "Recibirás un mensaje al finalizar la instalación. Funciono bien, ten paciencia si tardo un poco :)")
@@ -139,10 +122,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['reboot'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/reboot"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --reboot --server " + m.text[len("/reboot"):])
     bot.send_message(cid, "Reiniciando servidor " + m.text[len("/reboot"):] + "...")
     bot.send_chat_action(cid, 'typing')
@@ -153,10 +132,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['maintenance'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/maintenance"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --maintenance --time 1h --server " + m.text[len("/maintenance"):])
     bot.send_chat_action(cid, 'typing')
     os.system(com)	
@@ -165,10 +140,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['info'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/info"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --info --server " + m.text[len("/info"):])
     bot.send_message(cid, "Recogiendo la información del servidor " + m.text[len("/info"):] + "...")
     bot.send_chat_action(cid, 'typing')
@@ -179,10 +150,6 @@ def command_long_text(m):
 @bot.message_handler(commands=['url'])
 def command_long_text(m):
     cid = m.chat.id
-    mystring = (m.text[len("/url"):])
-    if not mystring:
-       bot.send_message(cid, "No has pasado ningún servidor. Prueba de nuevo o revisa el comando /ayuda")
-       exit()
     com = ("/usr/bin/robocop --robocop --url " + m.text[len("/url"):])
     bot.send_message(cid, "Revisando el estado de la URL " + m.text[len("/url"):] + "...")
     bot.send_chat_action(cid, 'typing')
@@ -212,6 +179,21 @@ def command_long_text(m):
     f = os.popen("pwd")
     result = f.read()
     bot.send_message(cid, "Directorio actual: " + result, reply_markup=markup)
+
+
+# Ejecuta una lista de comandos
+@bot.message_handler(commands=['execlist'])
+def command_long_text(m):
+    cid = m.chat.id
+    comandos = m.text[len("/execlist\n"):].split('\n')
+    for com in comandos:
+        bot.send_message(cid, "Ejecutando: " + com)
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(2)
+    f = os.popen(com)
+    result = f.read()
+    bot.send_message(cid, "Resultado: " + result, )
+    bot.send_message(cid, "Comandos ejecutados.", reply_markup=markup)
 
 # filter on a specific message
 @bot.message_handler(func=lambda message: message.text == "Hola")

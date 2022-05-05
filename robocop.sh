@@ -232,11 +232,12 @@ function robocop_install {
                         mkdir ${HOME_DIRECTORY}logs
                         touch ${HOME_DIRECTORY}logs/robocop.log
                         touch ${HOME_DIRECTORY}logs/robocop_telegram.log
+			touch ${HOME_DIRECTORY}logs/bot.log
                         chmod  755 ${HOME_DIRECTORY}logs
                         chown -R ${USER}: ${HOME_DIRECTORY}logs
                         mkdir ${HOME_DIRECTORY}conf
                         chmod 755 ${HOME_DIRECTORY}conf
-                        cp robocop.conf ${HOME_DIRECTORY}conf/robocop.conf
+                        wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.conf -O ${HOME_DIRECTORY}conf/robocop.conf
                         chown -R ${USER}: ${HOME_DIRECTORY}conf
                         mkdir ${HOME_DIRECTORY}monit
                         mkdir ${HOME_DIRECTORY}monit/exe
@@ -245,6 +246,8 @@ function robocop_install {
                         chmod -R 755 ${HOME_DIRECTORY}monit
                         chown -R ${USER}: ${HOME_DIRECTORY}monit
 			mkdir ${HOME_DIRECTORY}telebot
+			wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/main.py -O ${HOME_DIRECTORY}telebot/main.py
+			wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/check_telebot -O ${HOME_DIRECTORY}telebot/check_telebot
 			touch ${HOME_DIRECTORY}telebot/usuarios.txt
 			chmod -R 755 ${HOME_DIRECTORY}telebot
                         chown -R ${USER}: ${HOME_DIRECTORY}telebot
@@ -265,8 +268,8 @@ function robocop_install {
                 mkdir ${HOME_DIRECTORY}logs
                 mkdir ${HOME_DIRECTORY}conf
                 chmod 755 ${HOME_DIRECTORY}
-                cp ${HOME_DIRECTORY}robocop.conf /home/ansible/robocop/conf/robocop.conf
-                source ${HOME_DIRECTORY}conf/robocop.conf
+                wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.conf -O ${HOME_DIRECTORY}conf/robocop.conf
+		source ${HOME_DIRECTORY}conf/robocop.conf
 
         fi
 
@@ -277,11 +280,6 @@ function robocop_install {
         else
                 mkdir ${HOME_DIRECTORY}
         fi
-
-
-        # Colocamos la última versión del fichero de configuración en su ubicación
-        #wget --quiet https://raw.githubusercontent.com/konguele/Telegrambots/stable/robocop.conf -O /etc/robocop/robocop.conf
-        #chmod 755 /
 
         # Instalamos el bot
         if [ "${TOKEN}" == 'poner_token' ]; then
@@ -308,6 +306,10 @@ function robocop_install {
                 sed -i s%'poner_id'%"${CHAT_ID}"%g ${HOME_DIRECTORY}conf/robocop.conf
 		sed -i s%'robocop'%"${USER}"%g ${HOME_DIRECTORY}conf/robocop.conf
                 sed -i s%'poner_directorio'%"${HOME_DIRECTORY}"%g ${HOME_DIRECTORY}conf/robocop.conf
+		sed -i s%'poner_token'%"${TOKEN}"%g ${HOME_DIRECTORY}telebot/main.py
+		sed -i s%'poner_log'%"${HOME_DIRECTORY}logs/bot.log"%g ${HOME_DIRECTORY}telebot/main.py
+		sed -i s%'poner_userdir'%"${HOME_DIRECTORY}telebot/usuarios.txt"%g ${HOME_DIRECTORY}telebot/main.py
+		sed -i s%'poner_conf'%"${HOME_DIRECTORY}conf/robocop.conf"%g ${HOME_DIRECTORY}telebot/check_telebot
 
                 # Actualizar SO
 		so_requerimientos
