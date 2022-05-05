@@ -1,7 +1,0 @@
----
-- hosts: poner_hosts
-  become: true
-  tasks:
-    - name: Reboot server 
-      reboot:
-        reboot_timeout: 3600

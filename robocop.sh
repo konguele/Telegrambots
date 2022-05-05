@@ -363,7 +363,7 @@ function robocop_install {
                 fi
 	# Activamos el job de cron para revisar el bot de Telegram
    	echo '[+] Actualización de cronjob para revisar que el bot de Telegram esté activo...'
-        echo -e "# Este cronjob comprueba el bot de Telegram en el horario elegido\n${CRON_JOB_TIME} ${USER} ${HOME_DIRECTORY}check_telebot" > /etc/cron.d/check_bot
+        echo -e "# Este cronjob comprueba el bot de Telegram en el horario elegido\n${CRON_JOB_TIME} ${USER} ${HOME_DIRECTORY}/telebot/check_telebot" > /etc/cron.d/check_bot
 
 
         elif [ "${TOKEN}" == '' ]; then
@@ -812,7 +812,7 @@ function start {
 }
 
 function stop {
-        kill $(ps -ef | grep -i robocop | awk '{print $2}')>>${HOME_DIRECTORY}logs/robocop.log 2>&1
+        kill -9 $(ps -ef | grep -i robocop | awk '{print $2}')>>${HOME_DIRECTORY}logs/robocop.log 2>&1
 }
 
 function delete {
@@ -1374,7 +1374,7 @@ function robocop_uninstall {
             echo "[-] Eliminando robocop.conf del sistema..."
             echo "[-] Eliminando ROBOCOP del sistema..."
             rm -f /usr/bin/robocop
-            #Enviamos mensaje de despedida
+	    #Enviamos mensaje de despedida
             curl -s -X POST $URL -d chat_id=$CHAT_ID -d text="$MENSAJE_ADIOS">${HOME_DIRECTORY}logs/robocop_telegram.log 2>&1
             cat ${HOME_DIRECTORY}logs/robocop_telegram.log>>${HOME_DIRECTORY}logs/robocop.log
             ERROR_ENVIO=$(cat ${HOME_DIRECTORY}logs/robocop_telegram.log | grep -i false | wc -l)
@@ -1383,8 +1383,13 @@ function robocop_uninstall {
                 exit 0
             fi
             echo "[-] Eliminando los directorios..."
-            rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs ${HOME_DIRECTORY}ansible
+            rm -rf ${HOME_DIRECTORY}conf ${HOME_DIRECTORY}monit ${HOME_DIRECTORY}logs ${HOME_DIRECTORY}ansible ${HOME_DIRECTORY}telebot
+	    echo "[-] Eliminando telebot..."
+	    rm -rf /etc/cron.d/check_bot
+	    kill -9 $(ps -ef | grep -i main.py | awk '{print $2}') 1>/dev/null 2>&1
+	    kill -9 $(ps -ef | grep -i robocop | awk '{print $2}') 1>/dev/null 2>&1
             echo "[i] Espero que ROBOCOP haya servidor con honores, ya se ha retirado a descansar a su pisito en Menorca..."
+	    rm -f /usr/bin/robocop
             exit 0
         fi
 }
