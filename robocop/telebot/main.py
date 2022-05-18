@@ -189,29 +189,56 @@ def command_long_text(m):
     time.sleep(3)
     os.system(com)
 
-# Ejecuta un comando
-@bot.message_handler(commands=['exec'])
+# Matar un proceso
+@bot.message_handler(commands=['kill'])
 def command_long_text(m):
     cid = m.chat.id
-    bot.send_message(cid, "Ejecutando: " + m.text[len("/exec"):])
-    bot.send_chat_action(cid, 'typing') 
-    time.sleep(2)
-    f = os.popen(m.text[len("/exec"):])
-    result = f.read()
-    bot.send_message(cid, "Resultado: " + result, reply_markup=markup)
+    mystring = (m.text[len("/kill"):])
+    if not mystring:
+       bot.send_message(cid, "No has pasado ningún dato. Prueba de nuevo o revisa el comando /ayuda")
+       exit()
+    comm_kill = m.text[len("/kill\n"):].split(" ",2)
+    server_kill = comm_kill[0]
+    proc_kill = comm_kill[1]
+    com = ("/home/ansible/git/Telegrambots/robocop.sh --robocop --kill_proc " + proc_kill + " --server " + server_kill)
+    bot.send_message(cid, "Ejecutando el comando para matar el proceso " + proc_kill + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(1)
+    os.system(com)
 
-
-# Cambia de directorio
-@bot.message_handler(commands=['cd'])
+# Parar un servicio
+@bot.message_handler(commands=['stop_proc'])
 def command_long_text(m):
     cid = m.chat.id
-    bot.send_message(cid, "Cambio a directorio: " + m.text[len("/cd"):])
-    bot.send_chat_action(cid, 'typing') 
-    time.sleep(2)
-    os.chdir(m.text[len("/cd"):].strip())
-    f = os.popen("pwd")
-    result = f.read()
-    bot.send_message(cid, "Directorio actual: " + result, reply_markup=markup)
+    mystring = (m.text[len("/stop_proc"):])
+    if not mystring:
+       bot.send_message(cid, "No has pasado ningún dato. Prueba de nuevo o revisa el comando /ayuda")
+       exit()
+    comm_stop = m.text[len("/stop_proc\n"):].split(" ",2)
+    server_stop = comm_stop[0]
+    proc_stop = comm_stop[1]
+    com = ("/home/ansible/git/Telegrambots/robocop.sh --robocop --stop_proc " + proc_stop + " --server " + server_stop)
+    bot.send_message(cid, "Ejecutando el comando para parar el servicio de " + proc_stop + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(1)
+    os.system(com)
+
+# Arrancar un servicio
+@bot.message_handler(commands=['start_proc'])
+def command_long_text(m):
+    cid = m.chat.id
+    mystring = (m.text[len("/start_proc"):])
+    if not mystring:
+       bot.send_message(cid, "No has pasado ningún dato. Prueba de nuevo o revisa el comando /ayuda")
+       exit()
+    comm_start = m.text[len("/start_proc\n"):].split(" ",2)
+    server_start = comm_start[0]
+    proc_start = comm_start[1]
+    com = ("/home/ansible/git/Telegrambots/robocop.sh --robocop --start_proc " + proc_start + " --server " + server_start)
+    bot.send_message(cid, "Ejecutando el comando para arrancar el servicio de " + proc_start + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(1)
+    os.system(com)
 
 # filter on a specific message
 @bot.message_handler(func=lambda message: message.text == "Hola")

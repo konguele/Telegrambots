@@ -637,9 +637,9 @@ function desc_metricas_telegram {
      	reunir_info_servidor
      	kill_process
      	if [ ${PID_COUNT} == 0 ]; then
-        	STATUS="No existe ningún proceso con el nombre ${PROCESS}"
+        	STATUS="No existe ningún proceso con el nombre ${PROCESS} activo"
     	elif [ ${PID_COUNT} -gt 1 ]; then
-        	STATUS="Debes ser más especificio, existen ${PID_COUNT} procesos con un nombre similar, si es correcto utiliza el comando --stop_proc"
+        	STATUS="Debes ser más especificio, existen ${PID_COUNT} procesos con un nombre similar, si es correcto utiliza el comando /stop_proc"
     	else
         	ssh ${USER}@${SERVER} sudo kill -9 ${PID_PROC}
         	STATUS="KILL EJECUTADO. El proceso ${PROCESS} ya no se encuentra en ejecución. Puedes arrancarlo de nuevo con el comando --start_proc en caso necesario"
@@ -1438,7 +1438,7 @@ function desc_kill {
      reunir_info_servidor
      kill_process
      if [ ${PID_COUNT} == 0 ]; then
-        echo "No existe ningún proceso con el nombre ${PROCESS}"
+        echo "No existe ningún proceso con el nombre ${PROCESS} en ejecución"
         exit 0
     elif [ ${PID_COUNT} -gt 1 ]; then
         echo "Debes ser más especificio, existen ${PID_COUNT} procesos con un nombre similar, si es correcto utiliza el comando --stop_proc"
