@@ -1,2 +1,0 @@
-# Este job activa la actualización automática de CPU en robocop en el horario elegido del servidor appweb
-/usr/bin/robocop --metrics --cpu --server appweb &> /dev/null

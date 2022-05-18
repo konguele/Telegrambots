@@ -1,7 +1,0 @@
----
-- include_tasks: updates_RHEL.yml
-  when: ansible_distribution == 'CentOS' or ansible_distribution == 'Red Hat Enterprise Linux' or ansible_distribution == 'RedHat' or ansible_distribution == 'AlmaLinux'
-- include_tasks: updates_DEB.yml
-  when: ansible_distribution == 'Debian' or ansible_distribution == 'Ubuntu' or ansible_distribution == 'Linux Mint'
-...
-# tasks file for os_opdates

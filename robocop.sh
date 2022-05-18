@@ -373,6 +373,8 @@ function robocop_install {
                 else
                         echo "[+] El mensaje ha sido enviado correctamente a Telegram"
                 fi
+		echo "[+] Arrancamos el Telegrambot para que pueda ejecutar tareas..."
+		python3 ${HOME_DIRECTORY}telebot/main.py &
 
                 echo "[?] ¿Quieres configurar las alertas de CRON? (si/no): "
                 read CRON
