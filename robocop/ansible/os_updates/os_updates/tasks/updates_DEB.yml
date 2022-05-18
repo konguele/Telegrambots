@@ -1,0 +1,17 @@
+---
+- name: Enable EPEL Repository on Debian
+  apt:
+    name: epel-release
+    state: latest
+
+- name: Updating Debian packages
+  apt:
+    name: '*'
+    state: latest
+    update_cache: yes
+  register: upgrade
+  tags: upgrade
+
+- name: Reboot server after install packages 
+  reboot:
+

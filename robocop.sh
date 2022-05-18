@@ -93,6 +93,24 @@ while test -n "$1"; do
             ARGUMENT_OPTION='1'
             shift
             ;;
+	--kill_proc)
+            ARGUMENT_KILL_PROC='1'
+            ARGUMENT_OPTION='1'
+	    PROCESS=$2
+            shift
+            ;;
+	--start_proc)
+            ARGUMENT_START_PROC='1'
+            ARGUMENT_OPTION='1'
+	    PROCESS=$2
+            shift
+            ;;
+	--stop_proc)
+            ARGUMENT_STOP_PROC='1'
+            ARGUMENT_OPTION='1'
+	    PROCESS=$2
+            shift
+            ;;
 
         # features
         --overview|overview)
@@ -400,7 +418,7 @@ function desc_metricas_telegram {
                 if [ ${STATUS} == OK  ]; then
                         STATUS="<b>OK</b> - CPU dentro de los umbrales acordados"
                 elif [ ${STATUS} == KO ]; then
-                        STATUS="<b>ALARMA!!</b> La CPU supera el umbral ${THRESHOLD_CPU}. Revisad lo antes posible"
+                        STATUS="<b>ALARMA!!</b> La CPU supera el umbral ${THRESHOLD_CPU}. El proceso ${PROCESS} tiene un consumo de ${CPU_CONS}!! Revisad lo antes posible"
                 fi
         MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>Tiempo activo</b>:  <code>${UPTIME}</code>\\n\\n<b>CPU</b>:         <code>${COMPLETE_LOAD}</code>\\n<b>Status:</b>      <code>${STATUS}</code>")"
         TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
@@ -439,7 +457,7 @@ function desc_metricas_telegram {
                 if [ ${STATUS} == OK  ]; then
                         STATUS="<b>OK</b> - Memoria dentro de los umbrales acordados"
                 else
-                        STATUS="<b>ALARMA!!</b> La memoria supera el umbral del ${THRESHOLD_MEMORY}. Revisad lo antes posible"
+                        STATUS="<b>ALARMA!!</b> La memoria supera el umbral del ${THRESHOLD_MEMORY}. El proceso ${PROCESS} tiene un consumo de ${RAM_CONS}!! Revisad lo antes posible"
                 fi
 
                 MESSAGE="$(echo -e "<b>Host:</b>                <code>${SERVER}</code>\\n<b>Tiempo activo</b>:          <code>${UPTIME}</code>\\n\\n<b>MEMORIA:</b>             ${USED_MEMORY}M/${TOTAL_MEMORY}M (${CURRENT_MEMORY_PERCENTAGE_ROUNDED}%)\\n\\n<b>Status:</b>        <code>${STATUS}</code>")"
@@ -613,8 +631,57 @@ function desc_metricas_telegram {
 
     fi
 
-}
 
+    if [ ${ARGUMENT_KILL_PROC} == '1' ]; then
+     	# requerimientos de la función
+     	reunir_info_servidor
+     	kill_process
+     	if [ ${PID_COUNT} == 0 ]; then
+        	STATUS="No existe ningún proceso con el nombre ${PROCESS}"
+    	elif [ ${PID_COUNT} -gt 1 ]; then
+        	STATUS="Debes ser más especificio, existen ${PID_COUNT} procesos con un nombre similar, si es correcto utiliza el comando --stop_proc"
+    	else
+        	ssh ${USER}@${SERVER} sudo kill -9 ${PID_PROC}
+        	STATUS="KILL EJECUTADO. El proceso ${PROCESS} ya no se encuentra en ejecución. Puedes arrancarlo de nuevo con el comando --start_proc en caso necesario"
+    	fi
+    MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n\\n<b>STATUS:</b>        <code>${STATUS}</code>")"
+    TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+    fi
+
+    if [ ${ARGUMENT_START_PROC} == '1' ]; then
+	start_process
+        STATUS_SERV=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_start.log)
+        if [ ${STATUS_SERV} == 'OK' ]; then
+                STATUS_PROC=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_proc.log)
+                if [ ${STATUS_PROC} == 'OK' ]; then
+                        STATUS="Hemos arrancado el servicio del proceso ${PROCESS} correctamente"
+                else
+                        STATUS="Alerta!! NO hemos podido arrancar el servicio del proceso ${PROCESS}, revisad lo antes posible."
+                fi
+        else
+                STATUS="El proceso ${PROCESS} no existe en el listado de servicios, no podemos arrancarlo."
+        fi
+	MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>PROCESS:</b>        <code>${PROCESS}</code>\\n\\n<b>STATUS:</b>        <code>${STATUS}</code>")"
+    	TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+    fi
+
+    if [ ${ARGUMENT_STOP_PROC} == '1' ]; then
+        stop_process
+        STATUS_SERV=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_stop.log)
+        if [ ${STATUS_SERV} == 'OK' ]; then
+                STATUS_PROC=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_proc.log)
+                if [ ${STATUS_PROC} == 'OK' ]; then
+                        STATUS="Hemos parado el servicio del proceso ${PROCESS} correctamente"
+                else
+                        STATUS="Alerta!! NO hemos podido parar el servicio del proceso ${PROCESS}, revisad lo antes posible."
+                fi
+        else
+                STATUS="El proceso ${PROCESS} no existe en el listado de servicios, no podemos pararlo."
+        fi
+        MESSAGE="$(echo -e "<b>Host:</b>        <code>${SERVER}</code>\\n<b>PROCESS:</b>        <code>${PROCESS}</code>\\n\\n<b>STATUS:</b>        <code>${STATUS}</code>")"
+        TELEGRAM_MESSAGE="${MESSAGE}&parse_mode=HTML&disable_web_page_preview=true"
+    fi
+}
 function envio_telegram {
 
         # Requerimientos de la función
@@ -927,7 +994,7 @@ function os_no_soportado {
 
 function no_disponible {
     echo 'robocop: La opción o método no está disponible sin el archivo de configuración de robocop.'
-    exit 1
+   exit 1
 }
 
 function no_metodo {
@@ -1010,6 +1077,8 @@ function reunir_metricas_cpu {
         CURRENT_LOAD="$(ssh ${USER}@${SERVER} cat /proc/loadavg | awk '{print $3}')"
         CURRENT_LOAD_PERCENTAGE="$(echo "(${CURRENT_LOAD}/${MAX_LOAD_SERVER})*100" | bc -l)"
         CURRENT_LOAD_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_LOAD_PERCENTAGE}" | tr -d '%'))"
+	PROCESS="$(ssh ${USER}@${SERVER} ps -Ao comm,pcpu --sort=-pcpu | head -n 2 | tail -n 1 | awk '{print $1}')"
+	CPU_CONS="$(ssh ${USER}@${SERVER} ps -Ao comm,pcpu --sort=-pcpu | head -n 2 | tail -n 1 | awk '{print $2}')"
         if [ "${CURRENT_LOAD_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_CPU_NUMBER}" ]; then
                 echo "OK" > ${HOME_DIRECTORY}monit/status_cpu.log
         else
@@ -1054,7 +1123,10 @@ function reunir_metricas_memoria {
         CURRENT_MEMORY_PERCENTAGE="$(echo "(${USED_MEMORY}/${TOTAL_MEMORY})*100" | bc -l)"
         CURRENT_MEMORY_PERCENTAGE_ROUNDED="$(printf "%.0f\n" $(echo "${CURRENT_MEMORY_PERCENTAGE}" | tr -d '%'))"
     fi
-
+    
+    PROCESS="$(ssh ${USER}@${SERVER} ps aux --sort -rss | head -2 | awk '{print $11}' | tail -1)"
+    RAM_CONS="$(ssh ${USER}@${SERVER} ps aux --sort -rss | head -2 | awk '{print $4}' | tail -1)"
+    
     if [ "${CURRENT_MEMORY_PERCENTAGE_ROUNDED}" -lt "${THRESHOLD_MEMORY_NUMBER}" ]; then
             echo "OK" > ${HOME_DIRECTORY}monit/status_mem.log
     else
@@ -1108,6 +1180,93 @@ function reunir_pending_updates {
     fi
 }
 
+function kill_process {
+    PID_PROC="$(ssh ${USER}@${SERVER} ps aux | grep -v grep | grep ${PROCESS} | awk '{print $2}')"
+    PID_COUNT="$(ssh ${USER}@${SERVER} ps aux | grep -v grep | grep ${PROCESS} | wc -l)"
+}
+
+function start_process {
+    so_requerimientos
+    if [ ${SERVICE_MANAGER} == 'systemctl' ]; then
+    	CHECK_PROC=$(ssh ${USER}@${SERVER} sudo systemctl list-unit-files --type service --all | grep -i ${PROCESS} | wc -l)
+	if [ ${CHECK_PROC} -gt 0 ]; then
+		ssh ${USER}@${SERVER} sudo systemctl start ${PROCESS}
+		echo "OK" > ${HOME_DIRECTORY}logs/status_start.log
+		STATUS_PROC=$(ssh ${USER}@${SERVER} sudo systemctl is-active ${PROCESS})
+		if [ ${STATUS_PROC} == 'active' ]; then
+			echo "OK" > ${HOME_DIRECTORY}logs/status_proc.log
+		else
+			echo "KO" > ${HOME_DIRECTORY}logs/status_proc.log
+		fi
+	else
+		echo "KO" > ${HOME_DIRECTORY}logs/status_start.log
+	fi 
+    elif [ ${SERVICE_MANAGER} == 'service' ]; then
+	CHECK_PROC=$(ssh ${USER}@${SERVER} sudo service --status-all | grep -i ${PROCESS} | wc -l)
+	if [ ${CHECK_PROC} -gt 0 ]; then
+                ssh ${USER}@${SERVER} sudo service ${PROCESS} start
+                echo "OK" > ${HOME_DIRECTORY}logs/status_start.log
+		STATUS_PROC=$(ssh ${USER}@${SERVER} sudo sudo service ${PROCESS} status | grep running | wc -l)
+                if [ ${STATUS_PROC} == '1' ]; then
+                        echo "OK" > ${HOME_DIRECTORY}logs/status_proc.log
+                else
+                        echo "KO" > ${HOME_DIRECTORY}logs/status_proc.log
+                fi
+        else
+                echo "KO" > ${HOME_DIRECTORY}logs/status_start.log
+        fi
+    elif [ ${SERVICE_MANAGER} == 'rc-service' ]; then
+	CHECK_PROC=$(ssh ${USER}@${SERVER} sudo rc-status --list | grep -i ${PROCESS} | wc -l)
+	if [ ${CHECK_PROC} -gt 0 ]; then
+                ssh ${USER}@${SERVER} sudo rc-service ${PROCESS} start
+                echo "OK" > ${HOME_DIRECTORY}logs/status_start.log
+        else
+                echo "KO" > ${HOME_DIRECTORY}logs/status_start.log
+        fi
+    fi
+}
+
+function stop_process {
+    so_requerimientos
+    if [ ${SERVICE_MANAGER} == 'systemctl' ]; then
+        CHECK_PROC=$(ssh ${USER}@${SERVER} sudo systemctl list-unit-files --type service --all | grep -i ${PROCESS} | wc -l)
+        if [ ${CHECK_PROC} -gt 0 ]; then
+                ssh ${USER}@${SERVER} sudo systemctl stop ${PROCESS}
+                echo "OK" > ${HOME_DIRECTORY}logs/status_stop.log
+                STATUS_PROC=$(ssh ${USER}@${SERVER} sudo systemctl is-active ${PROCESS})
+                if [ ${STATUS_PROC} == 'inactive' ]; then
+                        echo "OK" > ${HOME_DIRECTORY}logs/status_proc.log
+                else
+                        echo "KO" > ${HOME_DIRECTORY}logs/status_proc.log
+                fi
+        else
+                echo "KO" > ${HOME_DIRECTORY}logs/status_stop.log
+        fi
+    elif [ ${SERVICE_MANAGER} == 'service' ]; then
+        CHECK_PROC=$(ssh ${USER}@${SERVER} sudo service --status-all | grep -i ${PROCESS} | wc -l)
+        if [ ${CHECK_PROC} -gt 0 ]; then
+                ssh ${USER}@${SERVER} sudo service ${PROCESS} stop
+                echo "OK" > ${HOME_DIRECTORY}logs/status_stop.log
+                STATUS_PROC=$(ssh ${USER}@${SERVER} sudo sudo service ${PROCESS} status | grep running | wc -l)
+                if [ ${STATUS_PROC} == '1' ]; then
+                        echo "OK" > ${HOME_DIRECTORY}logs/status_proc.log
+                else
+                        echo "KO" > ${HOME_DIRECTORY}logs/status_proc.log
+                fi
+        else
+                echo "KO" > ${HOME_DIRECTORY}logs/status_stop.log
+        fi
+    elif [ ${SERVICE_MANAGER} == 'rc-service' ]; then
+        CHECK_PROC=$(ssh ${USER}@${SERVER} sudo rc-status --list | grep -i ${PROCESS} | wc -l)
+        if [ ${CHECK_PROC} -gt 0 ]; then
+                ssh ${USER}@${SERVER} sudo rc-service ${PROCESS} stop
+                echo "OK" > ${HOME_DIRECTORY}logs/status_stop.log
+        else
+                echo "KO" > ${HOME_DIRECTORY}logs/status_stop.log
+        fi
+    fi
+}
+
 #############################################################################
 #                       INFORMACIÓN POR PANTALLA                            #
 #############################################################################
@@ -1128,6 +1287,8 @@ function desc_metricas_cpu {
         else
                 echo "ESTADO CPU:       KO"
                 echo "ALERTA!! REVISAD CUANTO ANTES"
+		echo "PROCESO:		${PROCESS}"
+		echo "CONSUMO CPU:	${CPU_CONS}"
                 echo "KO" > ${HOME_DIRECTORY}monit/status_cpu.log
                 envio_telegram
         fi
@@ -1163,6 +1324,8 @@ function desc_metricas_mem {
     else
             echo "ESTADO MEMORIA:       KO"
             echo "ALERTA!! REVISAD CUANTO ANTES"
+	    echo "PROCESO:		${PROCESS}"
+	    echo "CONSUMO RAM:		${RAM_CONS}"
             echo "KO" > ${HOME_DIRECTORY}monit/status_mem.log
             envio_telegram
     fi
@@ -1268,6 +1431,53 @@ function desc_update {
         envio_telegram
     fi
 
+}
+
+function desc_kill {
+     # requerimientos de la función
+     reunir_info_servidor
+     kill_process
+     if [ ${PID_COUNT} == 0 ]; then
+        echo "No existe ningún proceso con el nombre ${PROCESS}"
+        exit 0
+    elif [ ${PID_COUNT} -gt 1 ]; then
+        echo "Debes ser más especificio, existen ${PID_COUNT} procesos con un nombre similar, si es correcto utiliza el comando --stop_proc"
+        exit 0
+    else
+	ssh ${USER}@${SERVER} sudo kill -9 ${PID_PROC}
+     	echo "El proceso ${PROCESS} ya no se encuentra en ejecución. Puedes arrancarlo de nuevo con el comando --start_proc en caso necesario"
+    fi	
+
+}
+
+function desc_start_proc {
+	start_process
+	STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_start.log)
+	if [ ${STATUS} == 'OK' ]; then
+		STATUS_PROC=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_proc.log)
+		if [ ${STATUS_PROC} == 'OK' ]; then
+			echo "[i] ROBOCOP: Hemos arrancado el servicio del proceso ${PROCESS} correctamente"
+		else
+			echo "[!] ROBOCOP: Alerta!! NO hemos podido arrancar el servicio del proceso ${PROCESS}, revisad lo antes posible."
+		fi
+	else
+		echo "[!] ROBOCOP: El proceso ${PROCESS} no existe en el listado de servicios, no podemos arrancarlo."
+	fi
+}
+
+function desc_stop_proc {
+        stop_process
+        STATUS=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_stop.log)
+        if [ ${STATUS} == 'OK' ]; then
+                STATUS_PROC=$(grep 'OK\|KO' ${HOME_DIRECTORY}logs/status_proc.log)
+                if [ ${STATUS_PROC} == 'OK' ]; then
+                        echo "[i] ROBOCOP: Hemos parado el servicio del proceso ${PROCESS} correctamente"
+                else
+                        echo "[!] ROBOCOP: Alerta!! NO hemos podido parar el servicio del proceso ${PROCESS}, revisad lo antes posible."
+                fi
+        else
+                echo "[!] ROBOCOP: El proceso ${PROCESS} no existe en el listado de servicios, no podemos pararlo."
+        fi
 }
 
 #############################################################################
@@ -1792,6 +2002,18 @@ function robocop_main {
         auto_reboot
     elif [ "${ARGUMENT_REBOOT}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
         reboot_server
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_KILL_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        desc_kill
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_KILL_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_START_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        desc_start_proc
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_START_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        envio_telegram
+    elif [ "${ARGUMENT_METRICS}" == '1' ] && [ "${ARGUMENT_STOP_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        desc_stop_proc
+    elif [ "${ARGUMENT_ROBOCOP}" == '1' ] && [ "${ARGUMENT_STOP_PROC}" == '1' ] && [ "${AUTOCRON}" == '1' ]; then
+        envio_telegram
     elif [ "${ARGUMENT_NONE}" == '1' ]; then
         opcion_no_valida
     elif [ "${1}" == '' ]; then

@@ -1,0 +1,6 @@
+#!/bin/bash
+while true
+do
+  sleep 3s
+  /home/ansible/git/Telegrambots/robocop/monit/time/3s/* 1>/dev/null 2>&1
+done
