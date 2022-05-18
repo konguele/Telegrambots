@@ -239,6 +239,23 @@ def command_long_text(m):
     time.sleep(1)
     os.system(com)
 
+# Comprueba un FS
+@bot.message_handler(commands=['fs'])
+def command_long_text(m):
+    cid = m.chat.id
+    mystring = (m.text[len("/fs"):])
+    if not mystring:
+       bot.send_message(cid, "No has pasado ningún dato. Prueba de nuevo o revisa el comando /ayuda")
+       exit()
+    comm_fs = m.text[len("/fs\n"):].split(" ",2)
+    server_fs = comm_fs[0]
+    fs = comm_fs[1]
+    com = ("/usr/bin/robocop --robocop --fs " + fs + " --server " + server_fs)
+    bot.send_message(cid, "Ejecutando el comando para ver el estado del fs " + fs + " en el servidor " + server_fs + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(1)
+    os.system(com)
+
 # filter on a specific message
 @bot.message_handler(func=lambda message: message.text == "Hola")
 def command_text_hi(m):
