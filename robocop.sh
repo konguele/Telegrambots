@@ -718,19 +718,19 @@ function maintenance_mode {
         TIME=$(echo "${MAINT_TIME}" | sed -e 's/.$//')
         echo "[i] El servidor ${SERVER} estará en mantenimiento durante ${MAINT_TIME}"
         if [ ${MAINT_LETTER} == 's' ]; then
-                INICIO=$(date | cut -d " " -f 5)
-                FIN=$(date -d "+${TIME} seconds" | cut -d " " -f 5)
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} seconds" | cut -d " " -f 4)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'm' ]; then
-                INICIO=$(date | cut -d " " -f 5)
-                FIN=$(date -d "+${TIME} minutes" | cut -d " " -f 5)
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} minutes" | cut -d " " -f 4)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'h' ]; then
-                INICIO=$(date | cut -d " " -f 5)
-                FIN=$(date -d "+${TIME} hours" | cut -d " " -f 5)
+                INICIO=$(date | cut -d " " -f 4)
+                FIN=$(date -d "+${TIME} hours" | cut -d " " -f 4)
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará a las ${FIN}"
         elif [ ${MAINT_LETTER} == 'd' ]; then
-                INICIO=$(date | cut -d " " -f 5)
+                INICIO=$(date | cut -d " " -f 4)
                 FIN=$(date -d "+${TIME} days")
                 echo "[i] El mantenimiento empieza a las ${INICIO} y finalizará el día ${FIN}"
         fi

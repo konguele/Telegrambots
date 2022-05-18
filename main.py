@@ -25,10 +25,26 @@ commands = {
     'fs': 'Muestra el estado del FS en el servidor elegido',
     'reboot': 'Reinicia el servidor elegido',
     'service': 'Muestra el estado del SERVICIO en el servidor elegido',
+    'stop_proc': 'Para el servicio en el servidor elegido',
+    'kill_proc': 'Mata el proceso en el servidor elegido',
+    'start_proc': 'Arranca el servicio en el servidor elegido',
     'updates': 'Muestra si hay actualizaciones en el servidor',
     'install_updates': 'Instala las actualizaciones pendientes',
     'maintenance': 'Pone en mantenimiento el servidor elegido durante un tiempo determinado',
-    'stop': 'Para el mensajeo con el bot' 
+    'stop': 'Para el mensajeo con el bot'
+    'examples: '
+    '	/cpu server_name'
+    '	/ram server_name'
+    '	/fs server_name file_system'
+    '	/reboot server_name'
+    '	/service server_name service_name proc_name'
+    '	/updates server_name'
+    '	/updates server_name'
+    '	/install_updates server_name'
+    '	/maintenance server_name time'
+    '	/stop_proc server_name proc'
+    '	/kill_proc server_name proc'
+    '	/start_proc server_name proc' 
 }
 
 markup = types.ReplyKeyboardMarkup()
@@ -235,6 +251,24 @@ def command_long_text(m):
     proc_start = comm_start[1]
     com = ("/usr/bin/robocop --robocop --start_proc " + proc_start + " --server " + server_start)
     bot.send_message(cid, "Ejecutando el comando para arrancar el servicio de " + proc_start + "...")
+    bot.send_chat_action(cid, 'typing')
+    time.sleep(1)
+    os.system(com)
+
+# Estado de un servicio
+@bot.message_handler(commands=['service'])
+def command_long_text(m):
+    cid = m.chat.id
+    mystring = (m.text[len("/service"):])
+    if not mystring:
+       bot.send_message(cid, "No has pasado ningún dato. Prueba de nuevo o revisa el comando /ayuda")
+       exit()
+    comm_status = m.text[len("/service\n"):].split(" ",3)
+    server_status = comm_status[0]
+    service_status = comm_status[1]
+    proc_status = comm_status[2]
+    com = ("/usr/bin/robocop --robocop --service " + service_status + " " + proc_status + " --server " + server_status)
+    bot.send_message(cid, "Ejecutando el comando para ver el estado del servicio de " + proc_status + "...")
     bot.send_chat_action(cid, 'typing')
     time.sleep(1)
     os.system(com)
