@@ -375,7 +375,7 @@ function robocop_install {
                         echo "[+] El mensaje ha sido enviado correctamente a Telegram"
                 fi
 		echo "[+] Arrancamos el Telegrambot para que pueda ejecutar tareas..."
-
+		systemctl restart crond
                 echo "[?] ¿Quieres configurar las alertas de CRON? (si/no): "
                 read CRON
                 if [ $CRON == 'si' ]; then
