@@ -4,5 +4,5 @@ TELEBOT=$(ps -ef | grep -i main.py | grep -v grep | wc -l)
 
 if [ ${TELEBOT} == 0 ]; then
 	source poner_source
-	python3 poner_dir &
+	python3 ${HOME_DIRECTORY}telebot/main.py &
 fi

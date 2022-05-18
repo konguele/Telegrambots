@@ -1,0 +1,17 @@
+[all]
+appdb
+appweb
+ansible
+
+[db]
+appdb
+
+[web_server]
+appweb
+
+[ansible_server]
+ansible
+
+[no_ansible]
+appdb
+appweb

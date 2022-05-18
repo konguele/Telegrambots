@@ -327,7 +327,8 @@ function robocop_install {
 		sed -i s%'poner_token'%"${TOKEN}"%g ${HOME_DIRECTORY}telebot/main.py
 		sed -i s%'poner_log'%"${HOME_DIRECTORY}logs/bot.log"%g ${HOME_DIRECTORY}telebot/main.py
 		sed -i s%'poner_userdir'%"${HOME_DIRECTORY}telebot/usuarios.txt"%g ${HOME_DIRECTORY}telebot/main.py
-		sed -i s%'poner_conf'%"${HOME_DIRECTORY}conf/robocop.conf"%g ${HOME_DIRECTORY}telebot/check_telebot
+		sed -i s%'poner_dir'%"${HOME_DIRECTORY}telebot/main.py"%g ${HOME_DIRECTORY}telebot/check_telebot
+		sed -i s%'poner_source'%"${HOME_DIRECTORY}conf/robocop.conf"%g ${HOME_DIRECTORY}telebot/check_telebot
 
                 # Actualizar SO
 		so_requerimientos
@@ -374,7 +375,6 @@ function robocop_install {
                         echo "[+] El mensaje ha sido enviado correctamente a Telegram"
                 fi
 		echo "[+] Arrancamos el Telegrambot para que pueda ejecutar tareas..."
-		python3 ${HOME_DIRECTORY}telebot/main.py &
 
                 echo "[?] ¿Quieres configurar las alertas de CRON? (si/no): "
                 read CRON
