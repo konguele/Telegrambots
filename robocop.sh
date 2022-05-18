@@ -375,7 +375,6 @@ function robocop_install {
                         echo "[+] El mensaje ha sido enviado correctamente a Telegram"
                 fi
 		echo "[+] Arrancamos el Telegrambot para que pueda ejecutar tareas..."
-		systemctl restart crond
                 echo "[?] ¿Quieres configurar las alertas de CRON? (si/no): "
                 read CRON
                 if [ $CRON == 'si' ]; then
@@ -383,8 +382,8 @@ function robocop_install {
                 fi
 	# Activamos el job de cron para revisar el bot de Telegram
    	echo '[+] Actualización de cronjob para revisar que el bot de Telegram esté activo...'
-        echo -e "# Este cronjob comprueba el bot de Telegram en el horario elegido\n${CRON_JOB_TIME} ${USER} ${HOME_DIRECTORY}/telebot/check_telebot" > /etc/cron.d/check_bot
-
+        echo -e "# Este cronjob comprueba el bot de Telegram en el horario elegido\n${CRON_JOB_TIME} ${USER} ${HOME_DIRECTORY}telebot/check_telebot" > /etc/cron.d/check_bot
+	systemctl restart crond
 
         elif [ "${TOKEN}" == '' ]; then
                 echo "Algo ha salido mal, no se han cargado las variables de entorno. Las cargo y volvemos a empezar :)"
